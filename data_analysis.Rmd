@@ -9,22 +9,173 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+## Summary
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+The purpose of this document is to input GeoMx Spatial Transcriptomics Data and perform Quality Control, filtering, and data normalization. 
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+This Markdown document was created for the paper "Spatial Transcriptomic Profiling of the Human Fallopian Tube Epithelium Reveals Region-specific Gene Expression Patterns" to be published in _Communications Biology_ in 2025. 
 
-```{r cars}
-summary(cars)
+
+This analysis is based on the following Bioconductor vignette:
+
+[Analyzing GeoMx-NGS RNA Expression Data with GeomxTools (bioconductor.org)](https://www.bioconductor.org/packages/release/workflows/vignettes/GeoMxWorkflows/inst/doc/GeomxTools_RNA-NGS_Analysis.html#5_Normalization)
+
+
+Griswold M, Reeves J, Divakar P, Ortogero N, Yang Z, Zimmerman S, Vitancol R, David H (2023). GeoMxWorkflows: GeoMx Digital Spatial Profiler (DSP) data analysis workflows. doi:10.18129/B9.bioc.GeoMxWorkflows, R package version 1.8.0, https://bioconductor.org/packages/GeoMxWorkflows.
+
+
+## About the dataset
+
+We analyze four different anatomical regions of the Fallopian tube: isthmus, ampulla, infundibulum, and fimbria. 
+
+Slides are stained for markers of ciliated (FOXJ1) and Secretory (PAX8) and regions of interest are segmented based on these markers. 
+
+This script takes input files (dccs, annotations, and pkc files) and creates a GeoMx Data object. It then performs several filtering and quality control steps following the recommendations provided by Nanostring. Finally, the output is normalized to create the final dataset. 
+
+
+# 1. Packages
+
+```{r}
+
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+# 
+# # The following initializes most up to date version of Bioc
+BiocManager::install(version="3.19")
+
+BiocManager::install("NanoStringNCTools")
+BiocManager::install("GeomxTools")
+BiocManager::install("GeoMxWorkflows")
+
+# Note:
+# Need to install package lme4, numderiv
+library(NanoStringNCTools)
+library(GeomxTools)
+library(GeoMxWorkflows)
+
+if(packageVersion("GeomxTools") < "2.1" & 
+   packageVersion("GeoMxWorkflows") >= "1.0.1"){
+    stop("GeomxTools and Workflow versions do not match. Please use the same version. 
+    This workflow is meant to be used with most current version of packages. 
+    If you are using an older version of Bioconductor please reinstall GeoMxWorkflows and use vignette(GeoMxWorkflows) instead")
+}
+
+if(packageVersion("GeomxTools") > "2.1" & 
+   packageVersion("GeoMxWorkflows") <= "1.0.1"){
+    stop("GeomxTools and Workflow versions do not match. 
+         Please use the same version, see install instructions above.")
+    
+    # to remove current package version
+        # remove.packages("GeomxTools")
+        # remove.packages("GeoMxWorkflows")
+    # see install instructions above 
+}
+
 ```
 
-## Including Plots
 
-You can also embed plots, for example:
+```{r}
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+
+library(knitr)
+library(tidyverse)
+library(dplyr)
+library(ggforce)
+library(writexl)
+
+
+library(umap)
+library(Rtsne)
+
+library(patchwork)
+
+library(here)
+
+
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+## 2. Loading Data
+
+
+Run to create the necessary folder to place documents inside.
+
+```{r}
+
+# Create main folder ("data_input")
+
+ifelse(!dir.exists("data_input"), dir.create("data_input"), "Folder exists already")
+
+
+# create subfolders: dccs, pks, annotation
+
+ifelse(!dir.exists("data_input/dccs"), dir.create("data_input/dccs"), "Folder exists already")
+
+ifelse(!dir.exists("ata_input/pkcs"), dir.create("data_input/pkcs"), "Folder exists already")
+
+ifelse(!dir.exists("data_input/annotation"), dir.create("data_input/annotation"), "Folder exists already")
+
+
+
+```
+
+We need three different types of files to create the initial dataset:
+
+-   DCCs files -- these contain the expression count data and some info about sequencing data from the next gen sequencing platform used.
+
+-   PKCs -- the probe assay metadata, which describes which gene targets are present in the data, find at the following link: [GeoMx DSP Configuration Files \| NanoString⁤](https://nanostring.com/products/geomx-digital-spatial-profiler/geomx-dsp-configuration-files/)
+
+    (Do not bother to unzip, place in the appropriate file as is.)
+
+-   Annotation file - this will contain information about the tissue, segment area and nuclei count, and any other info you choose to provide.
+
+
+We are just going to load all of the dcc files available along with basic annotations for all, then remove unneeded dccs later on.
+
+Now, let's test this to see if we can successfully create the GeoMx dataset object from these files.
+
+
+
+```{r}
+# 
+# The following function takes your directory and appends data_input
+
+datadir <- here::here("data_input")
+
+# automatically list files in each directory for use
+DCCFiles <- dir(here::here(datadir, "dccs"), pattern = "*.dcc",
+                full.names = TRUE, recursive = TRUE)
+
+
+PKCFiles <- dir(here::here(datadir, "pkcs"), pattern = ".pkc$",
+                                full.names = TRUE, recursive = TRUE)
+
+SampleAnnotationFile <- dir(here::here(datadir, "annotation"), pattern = ".xlsx$",
+      full.names = TRUE, recursive = TRUE)
+
+
+```
+
+
+Testing creation of `readNanoStringGeoMxSet` object. If you get errors saying files are missing or do not have any count info, check to make sure all .dcc files are in the folder (and that you have copied the correct ones).
+
+```{r}
+
+#load data
+
+
+all_data <-
+    readNanoStringGeoMxSet(dccFiles = DCCFiles,
+                           pkcFiles = PKCFiles,
+                           phenoDataFile = SampleAnnotationFile,
+                           phenoDataSheet = "Sheet1", # make sure this matches doc
+                           phenoDataDccColName = "Sample_ID",
+                           protocolDataColNames = c("aoi", "roi"),
+                           experimentDataColNames = c("panel"))
+
+```
+
+
+
+## 2 Loading Data
