@@ -24,7 +24,7 @@ Folders:
   * _/pkcs_ - contains .pkc file with probe information
   * _/annotations_ - contains an excel document with annotation information
 * **/stat_analysis** - a file containing excel files with results of statistical analyses performed by a collaborator
-* **/biorender_pics** - figures generated on Biorender needed for creating some figures
+* **/pictures** - figures generated on Biorender needed for creating some figures
 * **/IHC_analysis** - contains excel document with the results of IHC analysis performed by Pathologist Dr. Rashna Madan, needed for generating some figures
 
 

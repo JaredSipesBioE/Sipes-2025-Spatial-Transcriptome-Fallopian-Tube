@@ -184,6 +184,119 @@ all_valid <- all_q_norm[, pData(all_q_norm)$Patient %ni% c("P1", "P2", "P3")]
 ```
 
 
+# 0.3 Load Stat Analyses
+
+
+### Load files required for volcano plots
+
+
+```{r}
+
+
+stat_files <- paste0(getwd(), "/stat_files")
+
+stat_files_all <- paste0(stat_files, "/ALL")
+stat_files_disc <- paste0(stat_files, "/Discovery")
+stat_files_valid <- paste0(stat_files, "/Validation")
+
+#secretory cells
+pairwise_s_disc <- paste0(stat_files_disc, "/0.10_SECRETORY_Pairwise_region_comparison.xlsx")
+pairwise_s_valid <- paste0(stat_files_valid, "/Validation_SECRETORY_Pairwise_region_comparison.xlsx")
+pairwise_s_all <- paste0(stat_files_all, "/ALL_SECRETORY_Pairwise_region_comparison.xlsx")
+# ciliated cells 
+pairwise_c_disc <- paste0(stat_files_disc, "/0.10_CILIATED_Pairwise_region_comparison.xlsx")
+pairwise_c_valid <- paste0(stat_files_valid, "/Validation_CILIATED_Pairwise_region_comparison.xlsx")
+pairwise_c_all <- paste0(stat_files_all, "/ALL_CILIATED_Pairwise_region_comparison.xlsx")
+
+# create a nested list structure to store all of the dataframes in one object
+
+pairwise_comparisons <- list()
+
+```
+
+
+
+
+#### FUNCT: get_all_comparisons
+
+
+```{r}
+
+comparison_pairwise <- c("Fimbria.vs.Infundibulum", "Fimbria.vs.Ampulla", "Fimbria.vs.Isthmus", 
+                     "Infundibulum.vs.Ampulla", "Infundibulum.vs.Isthmus", "Ampulla.vs.Isthmus")
+
+pairwise_names <- c("fim_v_inf", "fim_v_amp", "fim_v_isth", "inf_v_amp", "inf_v_isth", "amp_v_isth")
+
+get_all_comparions <- function(path = pairwise_s_disc, comparison_list = comparison_pairwise, comparison_name = pairwise_names){
+  data_list <- lapply(comparison_list, read_xlsx, path = path)
+  names(data_list) <- comparison_name
+  
+  return(data_list)
+}
+
+
+```
+
+
+Create list of pairwise comparisons
+
+```{r}
+
+pairwise_comparisons[["disc"]][["sec"]] <- get_all_comparions(path = pairwise_s_disc)
+pairwise_comparisons[["valid"]][["sec"]] <- get_all_comparions(path = pairwise_s_valid)
+pairwise_comparisons[["all"]][["sec"]] <- get_all_comparions(path = pairwise_s_all)
+
+pairwise_comparisons[["disc"]][["cil"]] <- get_all_comparions(path = pairwise_c_disc)
+pairwise_comparisons[["valid"]][["cil"]] <- get_all_comparions(path = pairwise_c_valid)
+pairwise_comparisons[["all"]][["cil"]] <- get_all_comparions(path = pairwise_c_all)
+
+```
+
+
+### 2.2 Loading One vs Other Comparisons
+
+In this comparison, one region is comared to the average of all other regions, for four total comparisons
+
+1. fimbria v others
+2. Inf v others
+3. amp v others
+4. isth v others
+
+
+Excel doc locations
+
+```{r}
+
+one_v_other_s_disc <- paste0(stat_files_disc, "/0.10_SECRETORY_One.VS.Others_region_comparison.xlsx")
+one_v_other_s_valid <- paste0(stat_files_valid, "/Validation_SECRETORY_One.VS.Others_region_comparison.xlsx")
+one_v_other_s_all <- paste0(stat_files_all, "/ALL_SECRETORY_One.VS.Others_region_comparison.xlsx")
+
+one_v_other_c_disc <- paste0(stat_files_disc, "/0.10_CILIATED_One.VS.Others_region_comparison.xlsx")
+one_v_other_c_valid <- paste0(stat_files_valid, "/Validation_CILIATED_One.VS.Others_region_comparison.xlsx")
+one_v_other_c_all <- paste0(stat_files_all, "/ALL_CILIATED_One.VS.Others_region_comparison.xlsx")
+
+
+```
+
+```{r}
+
+one_v_other <- list()
+
+
+comparison_one_v_other <- c("Fimbria.vs.Others", "Infundibulum.vs.Others", "Ampulla.vs.Others", "Isthmus.vs.Others")
+
+one_v_other_names <- c("fim_v_other", "inf_v_other", "amp_v_other", "isth_v_other")
+
+one_v_other[["disc"]][["sec"]] <- get_all_comparions(path = one_v_other_s_disc, comparison_list = comparison_one_v_other, comparison_name = one_v_other_names)
+one_v_other[["valid"]][["sec"]] <- get_all_comparions(path = one_v_other_s_valid, comparison_list = comparison_one_v_other, comparison_name = one_v_other_names)
+one_v_other[["all"]][["sec"]] <- get_all_comparions(path = one_v_other_s_all, comparison_list = comparison_one_v_other, comparison_name = one_v_other_names)
+
+
+one_v_other[["disc"]][["cil"]] <- get_all_comparions(path = one_v_other_c_disc, comparison_list = comparison_one_v_other, comparison_name = one_v_other_names)
+one_v_other[["valid"]][["cil"]] <- get_all_comparions(path = one_v_other_c_valid, comparison_list = comparison_one_v_other, comparison_name = one_v_other_names)
+one_v_other[["all"]][["cil"]] <- get_all_comparions(path = one_v_other_c_all, comparison_list = comparison_one_v_other, comparison_name = one_v_other_names)
+
+```
 
 
 # F1. Figure 1
@@ -235,12 +348,150 @@ wrap_elements(combine_1)|wrap_elements(combine_2)
 
 # F2. Figure 2
 
-Add volcano plots for figure 2.
 
+### F2.A-D Secretory Discovery v Validation
+
+The volcano plots used in Figure 2 are generated below.
+
+Some slight differences in genes labeled are expected between different generations. 
+
+```{r, Secretory Segmements Comparison, fig.height=10, fig.width=20}
+genes_fim_v_other_sec <- get_common_genes(df_1 = one_v_other$disc$sec$fim_v_other, df_2 = one_v_other$valid$sec$fim_v_other, type = "both", FC_cutoff = 0.2)
+
+genes_inf_v_other_sec <- get_common_genes(df_1 = one_v_other$disc$sec$inf_v_other, df_2 = one_v_other$valid$sec$inf_v_other, type = "both", FC_cutoff = 0.2)
+
+genes_amp_v_other_sec <- get_common_genes(df_1 = one_v_other$disc$sec$amp_v_other, df_2 = one_v_other$valid$sec$amp_v_other, type = "both", FC_cutoff = 0.2)
+
+genes_isth_v_other_sec <- get_common_genes(df_1 = one_v_other$disc$sec$isth_v_other, df_2 = one_v_other$valid$sec$isth_v_other, type = "both", FC_cutoff = 0.2)
+
+
+title = 14
+
+disc_sec <- one_v_other$disc$sec
+a <- volcano_plot(df = disc_sec$fim_v_other, 
+                 title_name = "Fimbria Secretory Cells, Discovery", title_size = title, upreg = "Fimbria", downreg = "Others",
+                 #highlight_genes = genes_fim_v_other_sec
+                 ) |> add_labels(df = disc_sec$fim_v_other)
+  
+b <- volcano_plot(df = disc_sec$inf_v_other, 
+                 title_name = "Infundibulum Secretory Cells, Discovery", title_size = title, upreg = "Infundibulum", downreg = "Others",
+                 #highlight_genes = genes_inf_v_other_sec
+                 ) |> add_labels(df = disc_sec$inf_v_other) |> remove_legend()
+
+c <- volcano_plot(df = disc_sec$amp_v_other, 
+                 title_name = "Ampulla Secretory Cells, Discovery", title_size = title, upreg = "Ampulla", downreg = "Others",
+                 #highlight_genes = genes_amp_v_other_sec
+                 ) |> add_labels(df = disc_sec$amp_v_other) |> remove_legend()
+
+d <- volcano_plot(df = disc_sec$isth_v_other, 
+                 title_name = "Isthmus Secretory Cells, Discovery", title_size = title, upreg = "Isthmus", downreg = "Others",
+                 #highlight_genes = genes_isth_v_other_sec
+                 ) |> add_labels(df = disc_sec$isth_v_other) |> remove_legend()
+
+
+valid_sec <- one_v_other$valid$sec
+
+w <- volcano_plot(df = valid_sec$fim_v_other, 
+                 title_name = "Fimbria Secretory Cells, Validation", title_size = title, upreg = "Fimbria", downreg = "Others",
+                 #highlight_genes = genes_fim_v_other_sec
+                 ) |> add_labels(df = valid_sec$fim_v_other) |> remove_legend()
+  
+x <- volcano_plot(df = valid_sec$inf_v_other, 
+                 title_name = "Infundibulum Secretory Cells, Validation", title_size = title, upreg = "Infundibulum", downreg = "Others",
+                 #highlight_genes = genes_inf_v_other_sec
+                 ) |> add_labels(df = valid_sec$inf_v_other) |> remove_legend()
+
+y <- volcano_plot(df = valid_sec$amp_v_other, 
+                 title_name = "Ampulla Secretory Cells, Validation", title_size = title, upreg = "Ampulla", downreg = "Others",
+                 #highlight_genes = genes_amp_v_other_sec
+                 ) |> add_labels(df = valid_sec$amp_v_other) |> remove_legend()
+
+z <- volcano_plot(df = valid_sec$isth_v_other, 
+                 title_name = "Isthmus Secretory Cells, Validation", title_size = title, upreg = "Isthmus", downreg = "Others",
+                 #highlight_genes = genes_isth_v_other_sec
+                 ) |> add_labels(df = valid_sec$isth_v_other) |> remove_legend()
+
+top <-   grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Discovery Dataset, Secretory Cells', gp=gpar(fontsize=25)))
+
+bottom <- grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Validation Dataset, Secretory Cells', gp=gpar(fontsize=25)))
+
+wrap_elements(top) /(a | b | c | d) / wrap_elements(bottom) /(w | x | y | z)  + plot_layout(heights = c(1,5,1,5), guides = "collect") + plot_annotation(tag_levels = list(c("", "a", "b", "c", "d", "", "e", "f", "g", "h"))) & 
+  theme(plot.tag = element_text(size = 26))
+
+
+```
+
+### F2.G-J Ciliated Discovery v Validation
+
+```{r, Ciliated Segmements Comparison, fig.height=10, fig.width=20}
+
+
+genes_fim_v_other_sec <- get_common_genes(df_1 = one_v_other$disc$cil$fim_v_other, df_2 = one_v_other$valid$cil$fim_v_other, type = "both", FC_cutoff = 0.2)
+
+genes_inf_v_other_sec <- get_common_genes(df_1 = one_v_other$disc$cil$inf_v_other, df_2 = one_v_other$valid$cil$inf_v_other, type = "both", FC_cutoff = 0.2)
+
+genes_amp_v_other_sec <- get_common_genes(df_1 = one_v_other$disc$cil$amp_v_other, df_2 = one_v_other$valid$cil$amp_v_other, type = "both", FC_cutoff = 0.2)
+
+genes_isth_v_other_sec <- get_common_genes(df_1 = one_v_other$disc$cil$isth_v_other, df_2 = one_v_other$valid$cil$isth_v_other, type = "both", FC_cutoff = 0.2)
+
+
+title = 14
+
+disc_cil <- one_v_other$disc$cil
+a <- volcano_plot(df = disc_cil$fim_v_other, 
+                 title_name = "Fimbria Ciliated Cells, Discovery", title_size = title, upreg = "Fimbria", downreg = "Others",
+                 #highlight_genes = genes_fim_v_other_sec
+                 ) |> add_labels(df = disc_cil$fim_v_other)
+  
+b <- volcano_plot(df = disc_cil$inf_v_other, 
+                 title_name = "Infundibulum Ciliated Cells, Discovery", title_size = title, upreg = "Infundibulum", downreg = "Others",
+                 #highlight_genes = genes_inf_v_other_sec
+                 ) |> add_labels(df = disc_cil$inf_v_other) |> remove_legend()
+
+c <- volcano_plot(df = disc_cil$amp_v_other, 
+                 title_name = "Ampulla Ciliated Cells, Discovery", title_size = title, upreg = "Ampulla", downreg = "Others",
+                 #highlight_genes = genes_amp_v_other_sec
+                 ) |> add_labels(df = disc_cil$amp_v_other) |> remove_legend()
+
+d <- volcano_plot(df = disc_cil$isth_v_other, 
+                 title_name = "Isthmus Ciliated Cells, Discovery", title_size = title, upreg = "Isthmus", downreg = "Others",
+                 #highlight_genes = genes_isth_v_other_sec
+                 ) |> add_labels(df = disc_cil$isth_v_other) |> remove_legend()
+
+
+valid_cil <- one_v_other$valid$cil
+
+w <- volcano_plot(df = valid_cil$fim_v_other, 
+                 title_name = "Fimbria Ciliated Cells, Validation", title_size = title, upreg = "Fimbria", downreg = "Others",
+                 #highlight_genes = genes_fim_v_other_sec
+                 ) |> add_labels(df = valid_cil$fim_v_other) |> remove_legend()
+  
+x <- volcano_plot(df = valid_cil$inf_v_other, 
+                 title_name = "Infundibulum Ciliated Cells, Validation", title_size = title, upreg = "Infundibulum", downreg = "Others",
+                 #highlight_genes = genes_inf_v_other_sec
+                 ) |> add_labels(df = valid_cil$inf_v_other) |> remove_legend()
+
+y <- volcano_plot(df = valid_cil$amp_v_other, 
+                 title_name = "Ampulla Ciliated Cells, Validation", title_size = title, upreg = "Ampulla", downreg = "Others",
+                 #highlight_genes = genes_amp_v_other_sec
+                 ) |> add_labels(df = valid_cil$amp_v_other) |> remove_legend()
+
+z <- volcano_plot(df = valid_cil$isth_v_other, 
+                 title_name = "Isthmus Ciliated Cells, Validation", title_size = title, upreg = "Isthmus", downreg = "Others",
+                 #highlight_genes = genes_isth_v_other_sec
+                 ) |> add_labels(df = valid_cil$isth_v_other) |> remove_legend()
+
+top <-   grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Discovery Dataset, Ciliated Cells', gp=gpar(fontsize=25)))
+
+bottom <- grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Validation Dataset, Ciliated Cells', gp=gpar(fontsize=25)))
+
+wrap_elements(top) /(a | b | c | d) / wrap_elements(bottom) /(w | x | y | z)  + plot_layout(heights = c(1,5,1,5), guides = "collect") + plot_annotation(tag_levels = list(c("", "a", "b", "c", "d", "", "e", "f", "g", "h"))) & 
+  theme(plot.tag = element_text(size = 26))
+
+```
 
 # F3. Figure 3 
 
-Add volcano plots for figure 3.
 
 ## F3.1 Figure 3A
 
@@ -298,33 +549,6 @@ mature_cil <- c(
 
 
 
-### Load files required for volcano plots
-
-
-
-```{r}
-
-
-stat_files <- paste0(getwd(), "/stat_analysis")
-
-stat_files_all <- paste0(stat_files, "/ALL")
-stat_files_disc <- paste0(stat_files, "/Discovery")
-stat_files_valid <- paste0(stat_files, "/Validation")
-
-#secretory cells
-pairwise_s_disc <- paste0(stat_files_disc, "/0.10_SECRETORY_Pairwise_region_comparison.xlsx")
-pairwise_s_valid <- paste0(stat_files_valid, "/Validation_SECRETORY_Pairwise_region_comparison.xlsx")
-pairwise_s_all <- paste0(stat_files_all, "/ALL_SECRETORY_Pairwise_region_comparison.xlsx")
-# ciliated cells 
-pairwise_c_disc <- paste0(stat_files_disc, "/0.10_CILIATED_Pairwise_region_comparison.xlsx")
-pairwise_c_valid <- paste0(stat_files_valid, "/Validation_CILIATED_Pairwise_region_comparison.xlsx")
-pairwise_c_all <- paste0(stat_files_all, "/ALL_CILIATED_Pairwise_region_comparison.xlsx")
-
-# create a nested list structure to store all of the dataframes in one object
-
-pairwise_comparisons <- list()
-
-```
 
 
 
