@@ -733,5 +733,131 @@ get_all_comparions <- function(path = pairwise_s_disc, comparison_list = compari
 
 
 
+## FUNCT: plot_GO()
+# 
+# The following function is designed to plot all of the GO plots for the above data. 
+# 
+# 
+
+
+plot_GO <- function(data = GO_pairwise$disc$sec$fim_v_isth, n_graph = 12, min_genes = 3, title = ""){
+  
+  # if the title uses my shortened notation, expand to create a readable title
+  
+  if(title %in% c("fim_v_inf", "fim_v_amp", "fim_v_isth", "inf_v_amp", "inf_v_isth", "amp_v_isth")){
+    # define abbreviations and expansions
+    expansions <- c("_v_" = " versus ", 
+                    "fim" = "Fimbria", 
+                    "inf" = "Infundibulum", 
+                    "amp" = "Ampulla", 
+                    "isth" = "Isthmus")
+    
+    # replace all of the shortened names in the title 
+    for (word in names(expansions)) {
+      title <- gsub(word, expansions[[word]], title)
+    }
+  }
+  
+  # filter for gene count above the threshold set
+  
+  data <- data[data$nGenes > min_genes, ]
+  
+  # check to see if filtered for minimum gene counts returns any plottable pathways
+  if(nrow(data) == 0){
+    # no graphs can be generated, return NULL
+    return(NULL)
+  }
+  
+  # reduce to top n pathways
+  plot1_data <- head(data, n = n_graph) 
+  
+  # Remove preceding GO info
+  
+  plot1_data$Pathway <- gsub("^GO:[0-9]+ ", "", plot1_data$Pathway)
+  
+  
+  # Define a list of abbreviations
+  abbreviations <- c("response" = "resp", 
+                     "mediated by" = "med",
+                     "signaling pathway" = "signal. path.",
+                     "RNA polymerase II promoter" ="RNApolII prom",
+                     "transcription" = "transcr",
+                     "mediated" = "med.", 
+                     "cellular response" = "cell resp",
+                     "substance" = "subst",
+                     "process" = "proc",
+                     "chemical stimulus" = "chem stimul",
+                     "chemotaxis" = "chemotx", 
+                     "migration" = "migr", 
+                     "communication" = "comm",
+                     "subcellular" = "subcell",
+                     "cell surface" = "cell surf",
+                     "immune" = "imm", 
+                     "antimicrobial" = "antimicro",
+                     "differentiation" = "dif",
+                     "regeneration" = "regen",
+                     "proliferation" = "prolif",
+                     "programmed" = "program",
+                     "negative" = "neg",
+                     "positive" = "pos",
+                     "regulation" = "reg",
+                     "population" = "pop",
+                     "activation" = "activ",
+                     "developmental" = "dev",
+                     "development" = "dev",
+                     "anatomical" = "anat",
+                     "oxygen" = "O2")
+  
+  # Function to replace words with abbreviations
+  simplify_names <- function(name) {
+    for (word in names(abbreviations)) {
+      name <- gsub(word, abbreviations[[word]], name)
+    }
+    return(name)
+  }
+  
+  # Apply the function to the Pathway column
+  plot1_data$Pathway <- sapply(plot1_data$Pathway, simplify_names)
+  
+  
+  
+  # sort by Fold.Enrichment
+  plot_df <- plot1_data %>%
+    # use manhattan distance to calculate best pathways
+    # -log10 to ensure lowest FDR is first in df
+    arrange(abs(`Fold Enrichment`) + abs(-log10(`Enrichment FDR`))) |> mutate(Pathway = factor(Pathway, levels = Pathway))
+  
+  
+  
+  
+  # generate a palette of colors for the graph
+  pal <- wes_palette("Zissou1", 100, type = "continuous")
+  
+  
+  
+  # generate the GO plot
+  
+  test<-   ggplot(data = plot_df,  aes(x=`Fold Enrichment`, y= Pathway)) +
+    geom_segment(aes(x= 0, xend=`Fold Enrichment`), linewidth = 1) +
+    geom_point(aes(size= nGenes, color= `Enrichment FDR`)) +
+    theme_bw() +
+    scale_color_gradientn(colors = rev(pal))+ # reverses the order of the palette
+    scale_y_discrete(labels = function(x) str_wrap(x, width = 25))+
+    labs(x = "Fold Enrichment", y = "", title = title)
+  
+  # change the text size of the plot
+  plot <- test + theme(
+    axis.title=element_text(size=24),
+    axis.text=element_text(size=18),
+    plot.title=element_text(size=18),
+    legend.text =element_text(size=18),
+    legend.title = element_text(size = 18),
+    axis.text.y = element_text(vjust = 0.5))
+  
+  return(plot)
+}
+
+
+
 
 
