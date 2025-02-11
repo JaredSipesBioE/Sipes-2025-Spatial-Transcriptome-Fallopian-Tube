@@ -941,7 +941,6 @@ target_anat_valid <- gene_detection_rate(GeoMxObj = target_anat_valid, LOQ_Mat =
 ```
 
 
-
 ### FUNCT: gene_detection_plot()
 
 ```{r}

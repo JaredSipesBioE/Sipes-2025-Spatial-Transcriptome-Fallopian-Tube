@@ -1,0 +1,331 @@
+---
+title: "main_figures"
+author: "Jared Sipes"
+date: "2025-02-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+
+# Summary 
+
+The purpose of this R notebook is to create the figures for the paper:
+
+"Spatial Transcriptomic Profiling of the Human Fallopian Tube Epithelium Reveals Region-specific Gene Expression Patterns"
+
+This document uses a GeoMx dataset that has already undergone Quality control and normalization. 
+
+For details, see: geomx_dataset_and_normalization.Rmd
+
+
+
+# 0 Setup
+
+# 0.1 Load Packages
+ 
+The following packages are needed for this document. 
+
+
+```{r}
+# 
+# if (!require("BiocManager", quietly = TRUE))
+#     install.packages("BiocManager")
+
+# The following initializes most up to date version of Bioc
+# BiocManager::install(version="3.15")
+# 
+# BiocManager::install("NanoStringNCTools")
+# BiocManager::install("GeomxTools")
+# BiocManager::install("GeoMxWorkflows")
+
+# Note:
+# Needed to install package lme4, numderiv
+library(NanoStringNCTools)
+library(GeomxTools)
+library(GeoMxWorkflows)
+
+if(packageVersion("GeomxTools") < "2.1" & 
+   packageVersion("GeoMxWorkflows") >= "1.0.1"){
+    stop("GeomxTools and Workflow versions do not match. Please use the same version. 
+    This workflow is meant to be used with most current version of packages. 
+    If you are using an older version of Bioconductor please reinstall GeoMxWorkflows and use vignette(GeoMxWorkflows) instead")
+}
+
+if(packageVersion("GeomxTools") > "2.1" & 
+   packageVersion("GeoMxWorkflows") <= "1.0.1"){
+    stop("GeomxTools and Workflow versions do not match. 
+         Please use the same version, see install instructions above.")
+    
+    # to remove current package version
+        # remove.packages("GeomxTools")
+        # remove.packages("GeoMxWorkflows")
+    # see install instructions above 
+}
+```
+
+```{r}
+# for file names
+library(here)
+
+# read in xl files 
+library(readxl)
+
+
+# Need for UMAP, tSNE plots
+library(umap)
+library(Rtsne)
+
+# Needed for the heatmap plotting
+library(ComplexHeatmap)  #BiocManager::install("ComplexHeatmap")
+
+#Needed for volcano plotting functions
+
+library(ggrepel)
+library(ggplot2)
+library(latex2exp)
+library(plyr)
+library(dplyr)
+
+
+# Read in images and convert to ggplot object
+
+library(magick)
+
+
+# used for some color palettes  
+library(RColorBrewer)
+library(stringi)
+
+
+# For significance
+library(ggpubr)
+
+
+# For Stitching multiple plots together
+library(patchwork)
+library(cowplot)
+library(grid)
+
+```
+
+
+For space purposes, some functions are moved to an outside document "functions.R".
+
+
+```{r, include=FALSE}
+source("functions.R", local = knitr::knit_global())
+# or sys.source("your-script.R", envir = knitr::knit_global())
+```
+
+# 0.2 Load the Dataset and all Analyses Used
+
+```{r}
+
+# make sure to use correct "here" function.
+
+load(here::here("all_q_norm.Rdata"))
+
+load(here::here("disc_q_norm.Rdata"))
+
+load(here::here("valid_q_norm.Rdata"))
+
+
+dim(all_q_norm)
+
+dim(disc_q_norm)
+
+dim(valid_q_norm)
+
+```
+
+
+
+
+Refactor the GeoMx objects to use simplified region names. 
+
+```{r}
+
+factor_region <- function(GeoMxObj = all_q_norm){
+  pData(GeoMxObj)$region <- factor(pData(GeoMxObj)$region, levels = c("Fimbria", "Infundibulum", "Ampulla", "Isthmus"))
+  
+  pData(GeoMxObj)$region <- revalue(pData(GeoMxObj)$region, c("Fimbria"="Fim", "Infundibulum"="Inf", "Ampulla" = "Amp", "Isthmus" = "Isth"))
+  
+  return(GeoMxObj)
+}
+
+
+all_q_norm <- all_q_norm |> factor_region()
+
+disc_q_norm <- disc_q_norm |> factor_region()
+
+valid_q_norm <- valid_q_norm |> factor_region()
+
+```
+
+
+
+Subset the "all" dataset into discovery and validation datasets.
+
+The major difference between these datasets and the "disc_q_norm" and "valid_q_norm" is that the latter were normalizzed separately. In contrast, all_disc and all_valid were normalized together and comparisons of gene expression between the two datasets are valid. 
+
+```{r}
+all_disc <- all_q_norm[, pData(all_q_norm)$Patient %in% c("P1", "P2", "P3")]
+
+`%ni%` <- Negate(`%in%`)
+
+all_valid <- all_q_norm[, pData(all_q_norm)$Patient %ni% c("P1", "P2", "P3")]
+
+
+```
+
+
+
+
+# F1. Figure 1
+
+Figure 1A-F are images and are not found in this document. 
+
+Figure 1G was generated in the data_analysis document.
+
+
+
+## F1.2 Figure 1H 
+
+
+
+```{r  fig.height=6, fig.width=15}
+
+
+text_size <- 25
+
+# For Discovery Dataset
+
+FOXJ1_d <- cil_v_sec_boxplot_points(gene = "FOXJ1", dataset = disc_q_norm) + theme(text=element_text(size=text_size)) + theme(legend.position = "none")
+
+PAX8_d <- cil_v_sec_boxplot_points(gene = "PAX8", dataset = disc_q_norm) + theme(text=element_text(size=text_size)) + theme(legend.position = "none")
+
+
+# For Validation Dataset
+
+FOXJ1_v <- cil_v_sec_boxplot_points(gene = "FOXJ1", dataset = valid_q_norm) + theme(text=element_text(size=text_size)) + theme(legend.position = "none")
+
+PAX8_v <- cil_v_sec_boxplot_points(gene = "PAX8", dataset = valid_q_norm) + theme(text=element_text(size=text_size)) + theme(legend.position = "none")
+
+
+
+title1 <- grid::textGrob(label = "Discovery", gp=gpar(fontsize=35))
+title2 <- grid::textGrob(label = "Validation", gp=gpar(fontsize=35))
+
+# Patchwork is used to combine plots
+
+combine_1 =  (wrap_elements(panel = title1) / (FOXJ1_d + PAX8_d)) + plot_layout(heights = c(1.5, 10))
+combine_2 =  (wrap_elements(panel = title2) / (FOXJ1_v + PAX8_v)) + plot_layout(heights = c(1.5, 10))
+
+
+wrap_elements(combine_1)|wrap_elements(combine_2)
+```
+
+
+
+
+# F2. Figure 2
+
+Add volcano plots for figure 2.
+
+
+# F3. Figure 3 
+
+Add volcano plots for figure 3.
+
+## F3.1 Figure 3A
+
+
+Figure 3A is an image generated using BioRender. It is read in below and converted to a ggplot object. 
+
+
+```{r}
+
+# image_ggplot is from the package "magick"
+
+picture_3A <- image_read(paste0(getwd(), "/pictures/fig3a.jpeg")) |>
+  image_ggplot()
+
+```
+
+
+
+
+
+## F3.2 Figure 3B-C (Volcano plots with mature ciliated cell markers)
+
+
+
+#### Markers of Mature Ciliated Cells 
+
+
+The following markers of mature ciliated cells are identified using single cell sequencing by Ulrich et al. 
+
+Cellular heterogeneity of human fallopian tubes in normal and hydrosalpinx disease states identified using scRNA-seq
+
+DOI: 10.1016/j.devcel.2022.02.017
+
+
+```{r}
+
+mature_cil <- c(
+  "CAPS", "CETN2", "PIFO", "C1orf194", "C9orf24", "SNTN", "AGR3", "C20orf85", "MORN2", "PERP", "HMGN3", "TMEM59", "RSPH1",
+  "CALM1", "AGR2", "METRN", "DYNLL1", "CD24", "TXN", "PRDX5", "C9orf116", "IK", "MORN5", "FAM183A", "CFAP126", "CAPSL",
+  "IGFBP7", "C11orf88", "SPA17", "ODF3B", "CCDC146", "DYNLRB2", "FAM92B", "C9orf135", "PSENEN", "C5orf49", "FAM81B", "ARHGAP18", "PPIL6",
+  "SLC44A4", "RBP1", "ANKRD66", "CYSTM1", "MLF1", "CFAP52", "WDR54", "LRRC23", "CTSS", "TAX1BP1", "TPPP3", "GON7", "FAM174A",
+  "C6", "TSPAN3", "CIB1", "EFCAB1", "IFT57", "CCDC170", "DYDC2", "ARMC3", "NME5", "ENKUR", "MNS1", "TCTN1", "SMIM22",
+  "C11orf97", "WDR78", "MS4A8", "TSPAN6", "FAM216B", "RIIAD1", "FOXJ1", "ARL3", "DRC1", "CTXN1", "ROPN1L", "NUCB2", "EZR",
+  "GSTA3", "C4orf48", "MT-ND3", "NELL2", "CCDC113", "SPAG6", "AC013264.1", "GET1", "FXYD3", "TFF3", "EFCAB10", "STK33", "SPATA17",
+  "FAIM", "CABCOCO1", "CKB", "TTC29", "KIF21A", "SCGB2A1", "AL357093.2", "STOML3", "CFAP53", "WDR86-AS1", "DNAH9", "C20orf96", "TUBA1A",
+  "LDLRAD1", "SAMHD1", "SOD3", "DNAH5", "CCDC173", "ERICH3", "CTSD", "MT-ND5", "TSPAN1", "PLTP", "AK1", "FOLR1", "RHOB",
+  "FABP6", "CST6", "PDK4", "ANXA13", "RHOU", "IRX3", "C12orf75", "NEDD9", "MOSPD1", "TMEM190", "CRIP1", "MT-ND4L", "GOLM1",
+  "ASRGL1", "SCGB1D4", "GSTA1", "PGR", "G0S2", "FGA", "RRAD"
+)
+
+
+```
+
+
+
+
+
+### Load files required for volcano plots
+
+
+
+```{r}
+
+
+stat_files <- paste0(getwd(), "/stat_analysis")
+
+stat_files_all <- paste0(stat_files, "/ALL")
+stat_files_disc <- paste0(stat_files, "/Discovery")
+stat_files_valid <- paste0(stat_files, "/Validation")
+
+#secretory cells
+pairwise_s_disc <- paste0(stat_files_disc, "/0.10_SECRETORY_Pairwise_region_comparison.xlsx")
+pairwise_s_valid <- paste0(stat_files_valid, "/Validation_SECRETORY_Pairwise_region_comparison.xlsx")
+pairwise_s_all <- paste0(stat_files_all, "/ALL_SECRETORY_Pairwise_region_comparison.xlsx")
+# ciliated cells 
+pairwise_c_disc <- paste0(stat_files_disc, "/0.10_CILIATED_Pairwise_region_comparison.xlsx")
+pairwise_c_valid <- paste0(stat_files_valid, "/Validation_CILIATED_Pairwise_region_comparison.xlsx")
+pairwise_c_all <- paste0(stat_files_all, "/ALL_CILIATED_Pairwise_region_comparison.xlsx")
+
+# create a nested list structure to store all of the dataframes in one object
+
+pairwise_comparisons <- list()
+
+```
+
+
+
+
