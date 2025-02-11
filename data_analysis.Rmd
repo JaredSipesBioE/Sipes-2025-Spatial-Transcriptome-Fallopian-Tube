@@ -177,5 +177,1307 @@ all_data <-
 ```
 
 
+Nanostring recommends checking the PKC files to ensure the expected ones have been loaded.
 
-## 2 Loading Data
+```{r}
+
+# make sure you loaded knitr using library(knitr)
+
+pkcs <- annotation(all_data)
+modules <- gsub(".pkc", "", pkcs)
+kable(data.frame(PKCs = pkcs, modules = modules))
+
+```
+
+## 3. Study Design
+
+
+
+
+```{r}
+# Rename all_data so we don't mess up the original
+
+preQC_data <- all_data
+
+# Access PhenoData
+
+pheno_data <- pData(all_data)
+
+# Create shorter names for anatomical regions
+
+pheno_data <- pheno_data |>
+  dplyr::mutate(
+    shortRegion = forcats::fct_recode(region, "Amp" = "Ampulla",
+                              "Inf" = "Infundibulum",
+                              "Fimb" = "Fimbria",
+                              "Isth" = "Isthmus"
+                              )
+    )
+
+# update PhenoData in GeoMx object 
+
+pData(preQC_data) <- pheno_data
+
+
+# Split into all, disc, and valid
+
+
+
+preQC_all <- preQC_data #preQC_data[, pData(preQC_data)$Patient != "P6"] # to remove Patient 6 data, to test without P6
+
+preQC_discovery <-  preQC_data[, pData(preQC_data)$dataset == "discovery"]
+
+preQC_validation <- preQC_data[, pData(preQC_data)$dataset == "validation"]
+
+
+```
+
+
+```{r}
+
+
+count_mat <- dplyr::count(pData(preQC_data), Patient, region, segment)
+
+kable(count_mat)
+
+
+```
+
+
+
+
+
+### 3.1 Sankey Diagram
+
+Now that we have loaded the data, we can visually summarize the experimental design for our dataset to look at the different types of samples and ROI/AOI segments that have been profiled. We present this information in a Sankey diagram.
+
+
+
+```{r fig.height=10, fig.width=20}
+# function to create Sankey ploy
+create_sankey <- function(geomx_object){
+  
+  count_mat <- dplyr::count(pData(geomx_object), Patient, region = shortRegion, segment)
+  input_table <- gather_set_data(count_mat, 1:3)
+
+  ggplot(input_table, aes(x, id = id, split = y, value = n)) +
+    geom_parallel_sets(aes(fill = region), alpha = 0.5, axis.width = 0.1) +
+    geom_parallel_sets_axes(axis.width = 0.2) +
+    geom_parallel_sets_labels(color = "white", size = 6) +
+    theme_classic(base_size = 20) +
+    theme(legend.position = "bottom",
+          axis.ticks.y = element_blank(),
+          axis.line = element_blank(),
+          axis.text.y = element_blank()) +
+    scale_y_continuous(expand = expansion(0)) +
+    scale_x_discrete(expand = expansion(0)) +
+    labs(x = "", y = "") +
+    annotate(geom = "segment", x = 3.3, xend = 3.3,
+             y = 0, yend = 100, lwd = 2) +
+    annotate(geom = "text", x = 3.2, y = 50, angle = 90, size = 5,
+             hjust = 0.4, label = paste0(sum(count_mat$n), " segments"))
+}
+
+
+Sankey1 <- create_sankey(preQC_data) + ggtitle("All")
+Sankey2 <- create_sankey(preQC_discovery) + ggtitle("discovery")
+Sankey3 <- create_sankey(preQC_validation) + ggtitle("validation")
+
+((Sankey2 / Sankey3) | Sankey1) / guide_area()+
+  plot_layout(guides = 'collect')+
+  plot_layout(heights = c(12,1))
+
+```
+
+
+# 4. QC and Pre-Processing
+
+
+
+There are three sets of pre-process workflow for GeoMx data. In the first part, faulty segments are removed and genes are selected based on Quality Control.
+
+First, however, we must shift all counts of 0 to 1 (this permits downstream transformations.
+
+```{r}
+
+# shift counts to one
+
+preQC_all <- shiftCountsOne(preQC_all, useDALogic = TRUE)
+
+
+preQC_discovery <- shiftCountsOne(preQC_discovery, useDALogic = TRUE)
+
+
+preQC_validation <- shiftCountsOne(preQC_validation, useDALogic = TRUE)
+```
+
+
+
+### 4.1 Segment QC
+
+Assess sequencing quality and adequate tissue sampling for every ROI/AOI segment.
+
+Every ROI is tested for:
+
+-   Raw sequencing reads: segments with \> 1000 raw reads are removed
+
+-   \% Aligned, % Trimmed, % Stitched Sequencing Reads: Segments below \~ 80% for one or more of these QC parameters are removed.
+
+-   \% Sequencing Saturation ([1-deduplicated reads/aligned reads]%: segments below \~50% require additional sequencing to capture full sample diversity, not typically analyzed util improved.
+
+-   Negative Count: this is the geometric mean of the several unique negative probes in the GeoMx panel that do not target mRNA and establish the background count level per segment; segments with low negative counts (1-10) are not necessarily removed but may be studied closer for low endogenous gene signal and/or insufficient tissue sampling.
+
+-   No Template Control (NTC) count: values \>1,000 could indicate contamination for the segments associated with this NTC; however, in cases where the NTC count is between 1,000- 10,000, the segments may be used if the NTC data is uniformly low (e.g. 0-2 counts for all probes).
+
+-   Nuclei: \>100 nuclei per segment is generally recommended; however, this cutoff is highly study/tissue dependent and may need to be reduced; what is most important is [consistency in the nuclei distribution for segments within the study.]{.underline}
+
+
+-   Area: generally correlates with nuclei; a strict cutoff is not generally applied based on area.
+
+
+First, we select the QC parameter cutoffs, against which our ROI/AOI segments will be tested and flagged appropriately. We have selected the appropriate study-specific parameters for this study. 
+
+
+
+```{r}
+
+# Default QC cutoffs are commented in () adjacent to the respective parameters
+# study-specific values were selected after visualizing the QC results in more
+# detail below
+
+QC_params <-
+    list(minSegmentReads = 1000, # Minimum number of reads (1000)
+         percentTrimmed = 80,    # Minimum % of reads trimmed (80%)
+         percentStitched = 80,   # Minimum % of reads stitched (80%)
+         percentAligned = 75,    # Minimum % of reads aligned (80%)
+         percentSaturation = 50, # Minimum sequencing saturation (50%)
+         minNegativeCount = 1,   # Minimum negative control counts (10)
+         maxNTCCount = 3000,     # Maximum counts observed in NTC well (1000)
+         minNuclei = 20,         # Minimum # of nuclei estimated (100)
+         minArea = 1000)         # Minimum segment area (5000)
+
+
+#ALL Flags
+preQC_all <-
+    setSegmentQCFlags(preQC_all, 
+                      qcCutoffs = QC_params)
+# Discovery Flags
+
+preQC_discovery <-
+    setSegmentQCFlags(preQC_discovery, 
+                      qcCutoffs = QC_params)     
+
+# Validation Flags
+
+preQC_validation <-
+    setSegmentQCFlags(preQC_validation, 
+                      qcCutoffs = QC_params)  
+
+
+
+# Collate QC Results
+QCResults_All <- protocolData(preQC_all)[["QCFlags"]]
+QCResults_Disc <- protocolData(preQC_discovery)[["QCFlags"]]
+QCResults_Valid <- protocolData(preQC_validation)[["QCFlags"]]
+
+
+```
+
+
+```{r QC Results_All}
+
+flag_columns <- colnames(QCResults_All)
+QC_Summary_All <- data.frame(Pass = colSums(!QCResults_All[, flag_columns], na.rm = TRUE),
+                         Warning = colSums(QCResults_All[, flag_columns], na.rm = TRUE))
+QCResults_All$QCStatus <- apply(QCResults_All, 1L, function(x) {
+    ifelse(sum(x) == 0L, "PASS", "WARNING")
+})
+QC_Summary_All["TOTAL FLAGS", ] <-
+    c(sum(QCResults_All[, "QCStatus"] == "PASS", na.rm = TRUE),
+      sum(QCResults_All[, "QCStatus"] == "WARNING", na.rm = TRUE))
+
+
+```
+
+```{r QC Results_Disc}
+
+
+flag_columns <- colnames(QCResults_Disc)
+QC_Summary_Disc <- data.frame(Pass = colSums(!QCResults_Disc[, flag_columns], na.rm = TRUE),
+                         Warning = colSums(QCResults_Disc[, flag_columns], na.rm = TRUE))
+QCResults_Disc$QCStatus <- apply(QCResults_Disc, 1L, function(x) {
+    ifelse(sum(x) == 0L, "PASS", "WARNING")
+})
+QC_Summary_Disc["TOTAL FLAGS", ] <-
+    c(sum(QCResults_Disc[, "QCStatus"] == "PASS", na.rm = TRUE),
+      sum(QCResults_Disc[, "QCStatus"] == "WARNING", na.rm = TRUE))
+
+
+
+```
+
+```{r QC Results_Valid}
+
+flag_columns <- colnames(QCResults_Valid)
+QC_Summary_Valid <- data.frame(Pass = colSums(!QCResults_Valid[, flag_columns], na.rm = TRUE),
+                         Warning = colSums(QCResults_Valid[, flag_columns], na.rm = TRUE))
+QCResults_Valid$QCStatus <- apply(QCResults_Valid, 1L, function(x) {
+    ifelse(sum(x) == 0L, "PASS", "WARNING")
+})
+QC_Summary_Valid["TOTAL FLAGS", ] <-
+    c(sum(QCResults_Valid[, "QCStatus"] == "PASS", na.rm = TRUE),
+      sum(QCResults_Valid[, "QCStatus"] == "WARNING", na.rm = TRUE))
+
+
+```
+
+
+
+
+### 4.2 Visualize Segment QC
+
+Before excluding any low-performing ROI/AOI segments, we visualize the distributions of the data for the different QC parameters. Note that the "Select Segment QC" and "Visualize Segment QC" sections are performed in parallel to fully understand low-performing segments for a given study. Iteration may follow to select the study-specific QC cutoffs.
+
+For QC visualization, we write a quick function to draw histograms of our data.
+
+```{r}
+
+col_by <- "dataset"
+
+# Graphical summaries of QC statistics plot function
+QC_histogram <- function(assay_data = NULL,
+                         annotation = NULL,
+                         fill_by = NULL,
+                         thr = NULL,
+                         scale_trans = NULL) {
+    plt <- ggplot(assay_data,
+                  aes_string(x = paste0("unlist(`", annotation, "`)"),
+                             fill = fill_by)) +
+        geom_histogram(bins = 50) +
+        geom_vline(xintercept = thr, lty = "dashed", color = "black") +
+        theme_bw() + guides(fill = "none") +
+        facet_wrap(as.formula(paste("~", fill_by)), nrow = 4) +
+        labs(x = annotation, y = "Segments, #", title = annotation)+
+        scale_fill_manual(values = c("discovery" = "purple", "validation" = "darkorange"))
+    if(!is.null(scale_trans)) {
+        plt <- plt +
+            scale_x_continuous(trans = scale_trans)
+    }
+    plt
+}
+
+```
+
+
+Now we explore each of the QC metrics for the segments.
+
+
+
+```{r fig.height=6, fig.width=10}
+
+QC_plot <- function(preQC_data){
+  Trimmed <- QC_histogram(sData(preQC_data), "Trimmed (%)", col_by, 80 )
+  Stiched <- QC_histogram(sData(preQC_data), "Stitched (%)", col_by, 80)
+  Aligned <- QC_histogram(sData(preQC_data), "Aligned (%)", col_by, 75)
+  Saturated <- QC_histogram(sData(preQC_data), "Saturated (%)", col_by, 50) +
+    labs(title = "Sequencing Saturation (%)",
+         x = "Sequencing Saturation (%)")
+  Area <- QC_histogram(sData(preQC_data), "Area", col_by, 1000, scale_trans = "log10")
+  Nuclei <- QC_histogram(sData(preQC_data), "nuclei", col_by, 20)
+
+  Trimmed + Stiched + Aligned + Saturated + Area + Nuclei
+  
+  
+}
+
+```
+
+
+```{r}
+QC_plot(preQC_data = preQC_all)
+QC_plot(preQC_data = preQC_discovery)
+QC_plot(preQC_data = preQC_validation)
+```
+
+
+```{r neggeomeans_all}
+# calculate the negative geometric means for each module
+negativeGeoMeans_all <-
+    esBy(negativeControlSubset(preQC_all),
+         GROUP = "Module",
+         FUN = function(x) {
+             assayDataApply(x, MARGIN = 2, FUN = ngeoMean, elt = "exprs")
+         })
+protocolData(preQC_all)[["NegGeoMean"]] <- negativeGeoMeans_all
+
+# explicitly copy the Negative geoMeans from sData to pData
+negCols <- paste0("NegGeoMean_", modules)
+pData(preQC_all)[, negCols] <- sData(preQC_all)[["NegGeoMean"]]
+for(ann in negCols) {
+    plt <- QC_histogram(pData(preQC_all), ann, col_by, 2, scale_trans = "log10")
+    print(plt)
+}
+
+```
+
+```{r neggeomeans_discovery}
+# calculate the negative geometric means for each module
+negativeGeoMeans_disc <-
+    esBy(negativeControlSubset(preQC_discovery),
+         GROUP = "Module",
+         FUN = function(x) {
+             assayDataApply(x, MARGIN = 2, FUN = ngeoMean, elt = "exprs")
+         })
+protocolData(preQC_discovery)[["NegGeoMean"]] <- negativeGeoMeans_disc
+
+# explicitly copy the Negative geoMeans from sData to pData
+negCols <- paste0("NegGeoMean_", modules)
+pData(preQC_discovery)[, negCols] <- sData(preQC_discovery)[["NegGeoMean"]]
+for(ann in negCols) {
+    plt <- QC_histogram(pData(preQC_discovery), ann, col_by, 2, scale_trans = "log10")
+    print(plt)
+}
+
+```
+
+```{r neggeomeans_validation}
+# calculate the negative geometric means for each module
+negativeGeoMeans_val <-
+    esBy(negativeControlSubset(preQC_validation),
+         GROUP = "Module",
+         FUN = function(x) {
+             assayDataApply(x, MARGIN = 2, FUN = ngeoMean, elt = "exprs")
+         })
+protocolData(preQC_validation)[["NegGeoMean"]] <- negativeGeoMeans_val
+
+# explicitly copy the Negative geoMeans from sData to pData
+negCols <- paste0("NegGeoMean_", modules)
+pData(preQC_validation)[, negCols] <- sData(preQC_validation)[["NegGeoMean"]]
+for(ann in negCols) {
+    plt <- QC_histogram(pData(preQC_validation), ann, col_by, 2, scale_trans = "log10")
+    print(plt)
+}
+
+```
+
+```{r}
+# detach neg_geomean columns ahead of aggregateCounts call
+pData(preQC_all) <- pData(preQC_all)[, !colnames(pData(preQC_all)) %in% negCols]
+
+# detach neg_geomean columns ahead of aggregateCounts call
+pData(preQC_discovery) <- pData(preQC_discovery)[, !colnames(pData(preQC_discovery)) %in% negCols]
+
+# detach neg_geomean columns ahead of aggregateCounts call
+pData(preQC_validation) <- pData(preQC_validation)[, !colnames(pData(preQC_validation)) %in% negCols]
+
+# show all NTC values, Freq = # of Segments with a given NTC count:
+kable(table(NTC_Count = sData(preQC_all)$NTC),
+      col.names = c("NTC Count ALL", "# of Segments"))
+
+kable(table(NTC_Count = sData(preQC_discovery)$NTC),
+      col.names = c("NTC Count DISC", "# of Segments"))
+
+kable(table(NTC_Count = sData(preQC_validation)$NTC),
+      col.names = c("NTC Count VALID", "# of Segments"))
+
+```
+
+
+
+
+### 4.3 Remove Flagged Segments
+
+As the final step in the QC, we remove all flagged segments that do not meet the QC cutoff.
+
+```{r}
+all_afterQC <- preQC_all[, QCResults_All$QCStatus == "PASS"]
+
+discovery_afterQC <- preQC_discovery[, QCResults_Disc$QCStatus == "PASS"]
+validation_afterQC <- preQC_validation[, QCResults_Valid$QCStatus == "PASS"]
+
+# Subsetting our dataset has removed samples which did not pass QC
+
+# dim(preQC_data)
+# dim(all_afterQC)
+dim(preQC_discovery)
+dim(discovery_afterQC)
+# dim(validation_afterQC)
+
+
+```
+
+
+```{r}
+count_mat_QC1 <- dplyr::count(pData(all_afterQC), Patient, region, segment)
+
+kable(count_mat_QC1)
+
+```
+
+# 5. Probe QC
+
+Before we summarize our data into gene-level count data, we will remove low-performing probes. In short, this QC is an outlier removal process, whereby probes are either removed entirely from the study (global) or from specific segments (local). The QC applies to gene targets for which there are multiple distinct probes representing the count for a gene per segment. In WTA data, one specific probe exists per target gene; thus, Probe QC does not apply to the endogenous genes in the panel. Rather, it is performed on the negative control probes; there are multiple probes representing our negative controls, which do not target any sequence in the genome. These probes enable calculation of the background per segment and will be important for determining gene detection downstream.
+
+After Probe QC, there will always remain at least one probe representing every gene target. In other words, Probe QC never removes genes from your data.
+
+### 5.1 Set Probe QC Flags
+
+A probe is removed globally from the dataset if either of the following is true:
+
+-   the geometric mean of that probe's counts from all segments divided by the geometric mean of all probe counts representing the target from all segments is less than 0.1
+-   the probe is an outlier according to the Grubb's test in at least 20% of the segments A probe is removed locally (from a given segment) if the probe is an outlier according to the Grubb's test in that segment.
+
+We do not typically adjust these QC parameters.
+
+```{r}
+####DATASET == ALL#####
+
+# Generally keep the qcCutoffs parameters unchanged. Set removeLocalOutliers to 
+# FALSE if you do not want to remove local outliers
+all_afterQC <- setBioProbeQCFlags(all_afterQC, 
+                               qcCutoffs = list(minProbeRatio = 0.1,
+                                                percentFailGrubbs = 20), 
+                               removeLocalOutliers = TRUE)
+
+ProbeQCResults <- fData(all_afterQC)[["QCFlags"]]
+
+# Define QC table for Probe QC
+qc_df <- data.frame(Passed = sum(rowSums(ProbeQCResults[, -1]) == 0),
+                    Global = sum(ProbeQCResults$GlobalGrubbsOutlier),
+                    Local = sum(rowSums(ProbeQCResults[, -2:-1]) > 0
+                                & !ProbeQCResults$GlobalGrubbsOutlier))
+
+
+####DATASET == discovery #####
+
+discovery_afterQC <- setBioProbeQCFlags(discovery_afterQC, 
+                               qcCutoffs = list(minProbeRatio = 0.1,
+                                                percentFailGrubbs = 20), 
+                               removeLocalOutliers = TRUE)
+
+ProbeQCResults_d <- fData(discovery_afterQC)[["QCFlags"]]
+
+# Define QC table for Probe QC
+qc_df_d <- data.frame(Passed = sum(rowSums(ProbeQCResults_d[, -1]) == 0),
+                    Global = sum(ProbeQCResults_d$GlobalGrubbsOutlier),
+                    Local = sum(rowSums(ProbeQCResults_d[, -2:-1]) > 0
+                                & !ProbeQCResults_d$GlobalGrubbsOutlier))
+
+
+
+####DATASET == validation#####
+
+
+validation_afterQC <- setBioProbeQCFlags(validation_afterQC, 
+                               qcCutoffs = list(minProbeRatio = 0.1,
+                                                percentFailGrubbs = 20), 
+                               removeLocalOutliers = TRUE)
+
+ProbeQCResults_v <- fData(validation_afterQC)[["QCFlags"]]
+
+# Define QC table for Probe QC
+qc_df_v <- data.frame(Passed = sum(rowSums(ProbeQCResults_v[, -1]) == 0),
+                    Global = sum(ProbeQCResults_v$GlobalGrubbsOutlier),
+                    Local = sum(rowSums(ProbeQCResults_v[, -2:-1]) > 0
+                                & !ProbeQCResults_v$GlobalGrubbsOutlier))
+
+```
+
+We report the number of global and local outlier probes.
+
+```{r}
+
+qc_df 
+qc_df_d
+qc_df_v
+
+
+```
+
+
+### 5.2 Exclude Outlier Probes
+
+```{r}
+
+####DATASET == ALL####
+
+#Subset object to exclude all that did not pass Ratio & Global testing
+ProbeQCPassed <- 
+    subset(all_afterQC, 
+           fData(all_afterQC)[["QCFlags"]][,c("LowProbeRatio")] == FALSE &
+               fData(all_afterQC)[["QCFlags"]][,c("GlobalGrubbsOutlier")] == FALSE)
+
+####DATASET == ALL####
+
+dim(all_afterQC)
+dim(ProbeQCPassed)
+#> Features  Samples 
+#>    18641      229
+all_AfterProbeQC <- ProbeQCPassed 
+
+
+####DATASET == Discovery####
+
+#Subset object to exclude all that did not pass Ratio & Global testing
+ProbeQCPassed <- 
+    subset(discovery_afterQC, 
+           fData(discovery_afterQC)[["QCFlags"]][,c("LowProbeRatio")] == FALSE &
+               fData(discovery_afterQC)[["QCFlags"]][,c("GlobalGrubbsOutlier")] == FALSE)
+
+
+dim(discovery_afterQC)
+dim(ProbeQCPassed)
+#> Features  Samples 
+#>    18641      229
+discovery_AfterProbeQC <- ProbeQCPassed 
+
+
+####DATASET == Validation####
+
+#Subset object to exclude all that did not pass Ratio & Global testing
+ProbeQCPassed <- 
+    subset(validation_afterQC, 
+           fData(validation_afterQC)[["QCFlags"]][,c("LowProbeRatio")] == FALSE &
+               fData(validation_afterQC)[["QCFlags"]][,c("GlobalGrubbsOutlier")] == FALSE)
+
+
+dim(validation_afterQC)
+dim(ProbeQCPassed)
+#> Features  Samples 
+#>    18641      229
+validation_AfterProbeQC <- ProbeQCPassed 
+
+
+
+```
+
+
+
+### 5.3 Create Gene Level Count Data
+
+With our Probe QC steps complete, we will generate a gene-level count matrix. The count for any gene with multiple probes per segment is calculated as the geometric mean of those probes.
+
+```{r}
+
+
+target_anat_all <- aggregateCounts(all_AfterProbeQC)
+target_anat_disc<- aggregateCounts(discovery_AfterProbeQC)
+target_anat_valid<- aggregateCounts(validation_AfterProbeQC)
+
+
+
+# # Check how many unique targets the object has
+# length(unique(featureData(all_AfterProbeQC)[["TargetName"]]))
+# #> [1] 18504
+# 
+# # collapse to targets
+# target_AnatCompData_all <- aggregateCounts(all_AfterProbeQC)
+# dim(all_AfterProbeQC)
+# dim(target_AnatCompData)
+# #> Features  Samples 
+# #>    18504      229
+# exprs(target_AnatCompData)[1:5, 1:2]
+# #>       DSP-1001250007851-H-A02.dcc DSP-1001250007851-H-A03.dcc
+# #> A2M                           485                         262
+# #> NAT2                           15                          18
+# #> ACADM                          31                          15
+# #> ACADS                          27                          17
+# #> ACAT1                          29                          24
+# 
+
+```
+
+Notes: All 3 datasets end up with the same number of features (1812), so there are no differences in genes that can be analyzed between the three. 
+
+### 5.4 Limit of Quantitation
+
+In addition to Segment and Probe QC, we also determine the limit of quantification (LOQ) per segment. The LOQ is calculated based on the distribution of negative control probes and is intended to approximate the quantifiable limit of gene expression per segment. Please note that this process is more stable in larger segments. Likewise, the LOQ may not be as accurately reflective of true signal detection rates in segments with low negative probe counts (ex: \<2). The formula for calculating the LOQ in the ith segment is:
+
+$$LOQ_i=geomean(NegProbe_i)∗geoSD(NegProbe_i)^n$$
+
+We typically use 2 geometric standard deviations (n=2) above the geometric mean as the LOQ, which is reasonable for most studies. We also recommend that a minimum LOQ of 2 be used if the LOQ calculated in a segment is below this threshold.
+
+
+### FUNCT: LOQ_calc function
+
+```{r}
+
+## Create a function to calculate LOQ per module tested, then add it to the GeoMx Dataset
+
+LOQ_calc <- function(GeoMxObj = target_anat_all, cutoff = 2, minLOQ = 2){
+  # Calculate LOQ per module tested
+  LOQ <- data.frame(row.names = colnames(GeoMxObj))
+  for(module in modules) {
+    vars <- paste0(c("NegGeoMean_", "NegGeoSD_"),
+                   module)
+    if(all(vars[1:2] %in% colnames(pData(GeoMxObj)))) {
+        LOQ[, module] <-
+            pmax(minLOQ,
+                 pData(GeoMxObj)[, vars[1]] * 
+                     pData(GeoMxObj)[, vars[2]] ^ cutoff)
+    }
+    }
+  pData(GeoMxObj)$LOQ <- LOQ
+  
+  return(GeoMxObj)
+  
+}
+
+## usage example:
+
+#target_anat_all <- LOQ_calc(GeoMxObj = target_anat_all)
+
+# Check 
+
+#target_anat_all$LOQ
+
+```
+
+
+
+Now apply the function to all of the target datasets
+
+
+```{r}
+
+
+target_anat_all <- LOQ_calc(GeoMxObj = target_anat_all)
+target_anat_disc <- LOQ_calc(GeoMxObj = target_anat_disc)
+target_anat_valid <- LOQ_calc(GeoMxObj = target_anat_valid)
+
+```
+
+
+
+## 6. Filtering
+
+After determining the limit of quantification (LOQ) per segment, we recommend filtering out either segments and/or genes with abnormally low signal. Filtering is an important step to focus on the true biological data of interest.
+
+We determine the number of genes detected in each segment across the dataset.
+
+
+### FUNCT: create_LOQ_matrix
+
+```{r}
+# this function takes a GeoMx Data object and producesa matrix with number of genes detected in each 
+
+create_LOQ_matrix <- function(GeoMxObj = target_anat_all){
+  LOQ_Mat <- c()
+  for(module in modules) {
+    ind <- fData(GeoMxObj)$Module == module
+    Mat_i <- t(esApply(GeoMxObj[ind, ], MARGIN = 1,
+                       FUN = function(x) {
+                           x > LOQ[, module]
+                       }))
+    LOQ_Mat <- rbind(LOQ_Mat, Mat_i)
+  }
+  
+  
+  LOQ_Mat <- LOQ_Mat[fData(GeoMxObj)$TargetName, ]
+  
+  return(LOQ_Mat)
+        
+}
+
+
+### USAGE:
+##  LOQ_Mat_all <- create_LOQ_matrix(GeoMxObj = target_anat_all)
+
+```
+
+```{r}
+
+
+LOQ_Mat_all <- create_LOQ_matrix(GeoMxObj = target_anat_all)
+  
+LOQ_Mat_disc <- create_LOQ_matrix(GeoMxObj = target_anat_disc)
+
+LOQ_Mat_valid <- create_LOQ_matrix(GeoMxObj = target_anat_valid)
+  
+```
+
+
+
+
+### 6.1 Segment Gene Detection
+
+We first filter out segments with exceptionally low signal. These segments will have a small fraction of panel genes detected above the LOQ relative to the other segments in the study. Let's visualize the distribution of segments with respect to their % genes detected:
+
+
+### FUNCT: gene_detection_rate()
+
+
+```{r}
+
+gene_detection_rate <- function(GeoMxObj = target_anat_all, LOQ_Mat = LOQ_Mat_all){
+  # Save detection rate information to pheno data
+  pData(GeoMxObj)$GenesDetected <- 
+    colSums(LOQ_Mat, na.rm = TRUE)
+  pData(GeoMxObj)$GeneDetectionRate <-
+    pData(GeoMxObj)$GenesDetected / nrow(GeoMxObj)
+
+  # Determine detection thresholds: 1%, 5%, 10%, 15%, >15%
+  pData(GeoMxObj)$DetectionThreshold <- 
+    cut(pData(GeoMxObj)$GeneDetectionRate,
+        breaks = c(0, 0.01, 0.05, 0.1, 0.15, 0.20, 0.25, 1),
+        labels = c("<1%", "1-5%", "5-10%", "10-15%", "16%-20%", "21%-25%", ">25%"))
+  
+  return(GeoMxObj)
+}
+
+
+```
+
+
+```{r}
+target_anat_all <- gene_detection_rate(GeoMxObj = target_anat_all, LOQ_Mat = LOQ_Mat_all)
+
+target_anat_disc <- gene_detection_rate(GeoMxObj = target_anat_disc, LOQ_Mat = LOQ_Mat_disc)
+
+target_anat_valid <- gene_detection_rate(GeoMxObj = target_anat_valid, LOQ_Mat = LOQ_Mat_valid)
+
+
+
+```
+
+
+
+### FUNCT: gene_detection_plot()
+
+```{r}
+
+
+gene_detection_plot <- function(GeoMxObj = target_anat_all){
+  # stacked bar plot of different cut points (1%, 5%, 10%, 15%)
+  plot <- ggplot(pData(GeoMxObj),
+       aes(x = DetectionThreshold)) +
+    geom_bar(aes(fill = Patient)) +
+    geom_text(stat = "count", aes(label = after_stat(count)), vjust = -0.5) +
+    theme_bw() +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+    labs(x = "Gene Detection Rate",
+         y = "Segments, #",
+         fill = "Segment Type")
+  
+  return(plot)
+  
+}
+
+
+
+```
+
+
+```{r fig.height=6, fig.width=12}
+
+d_all <- gene_detection_plot(GeoMxObj = target_anat_all) + ggtitle("All")
+
+d_disc <- gene_detection_plot(GeoMxObj = target_anat_disc) + ggtitle("discovery")
+
+d_valid <- gene_detection_plot(GeoMxObj = target_anat_valid) + ggtitle("validation")
+
+
+((d_disc / d_valid) | d_all)
+ 
+
+```
+
+
+
+
+In this example, we choose to remove segments with less than **10%** of the genes detected. Generally, 5-10% detection is a reasonable segment filtering threshold. However, based on the experimental design (e.g. segment types, size, nuclei) and tissue characteristics (e.g. type, age), these guidelines may require adjustment.
+
+```{r}
+
+
+## ALL
+
+target_anat_all_0.1 <- target_anat_all[, pData(target_anat_all)$GeneDetectionRate >= .1]
+print("All")
+dim(target_anat_all_0.1) - dim(target_anat_all)
+
+
+## Disc
+
+target_anat_disc_0.1 <- target_anat_disc[, pData(target_anat_disc)$GeneDetectionRate >= .1]
+
+print("Discovery")
+dim(target_anat_disc_0.1) - dim(target_anat_disc)
+
+
+## Disc
+
+target_anat_valid_0.1 <- target_anat_valid[, pData(target_anat_valid)$GeneDetectionRate >= .1]
+
+print("Validation")
+dim(target_anat_valid_0.1) - dim(target_anat_valid)
+
+
+
+
+```
+
+
+Overall, the whole dataset results in two fewer samples being removed compared to discovery and validation separately. 
+
+
+```{r}
+
+# ALL
+
+count_mat_filter_all <- dplyr::count(pData(target_anat_all_0.1), Patient, region = shortRegion, segment)
+# gather the data and plot in order: class, slide name, region, segment
+test_gr_all <- gather_set_data(count_mat_filter_all, 1:3)
+
+# Discovery
+
+count_mat_filter_disc <- dplyr::count(pData(target_anat_disc_0.1), Patient, region = shortRegion, segment)
+test_gr_disc <- gather_set_data(count_mat_filter_disc, 1:3)
+
+# Validation
+
+count_mat_filter_valid <- dplyr::count(pData(target_anat_valid_0.1), Patient, region = shortRegion, segment)
+test_gr_valid <- gather_set_data(count_mat_filter_valid, 1:3)
+
+
+```
+
+
+### 6.2 Post Filter Sankey Diagram
+
+
+```{r fig.height=6, fig.width=12}
+
+sankey_diagram <- function(test_gr = test_gr_all, count_mat = count_mat_filter_all){
+  plot <- ggplot(test_gr, aes(x, id = id, split = y, value = n)) +
+    geom_parallel_sets(aes(fill = region), alpha = 0.5, axis.width = 0.1) +
+    geom_parallel_sets_axes(axis.width = 0.2) +
+    geom_parallel_sets_labels(color = "white", size = 9) +
+    theme_classic(base_size = 19) + 
+    theme(legend.position = "bottom",
+          axis.ticks.y = element_blank(),
+          axis.line = element_blank(),
+          axis.text.y = element_blank()) +
+    scale_y_continuous(expand = expansion(0)) + 
+    scale_x_discrete(expand = expansion(0)) +
+    labs(title = "Segment Distribution After QC", x = "", y = "", fill = "Region") +
+    annotate(geom = "segment", x = 3.3, xend = 3.3,
+             y = 0, yend = 100, lwd = 2) +
+    annotate(geom = "text", x = 3.2, y = 55, angle = 90, size = 8,
+             hjust = 0.5, label = paste0(sum(count_mat$n), " segments"))
+  
+  return(plot)
+} 
+
+
+text_size = 40
+All_Sankey <- sankey_diagram(test_gr = test_gr_all, count_mat = count_mat_filter_all) + ggtitle("All") +  theme(text=element_text(size=text_size)) + theme(plot.title = element_text(size=30))
+
+Disc_Sankey <- sankey_diagram(test_gr = test_gr_disc, count_mat = count_mat_filter_disc) + ggtitle("Discovery") +theme(text=element_text(size=text_size))  + theme(plot.title = element_text(size=30))
+
+
+
+Valid_Sankey <- sankey_diagram(test_gr = test_gr_valid, count_mat = count_mat_filter_valid) + ggtitle("Validation") + theme(text=element_text(size=text_size))  + theme(plot.title = element_text(size=30))
+
+
+
+(Disc_Sankey | Valid_Sankey) /guide_area() + plot_layout(heights = c(10, 1), guides = 'collect')
+
+
+
+```
+
+
+
+### 6.3 Gene Detection Rate.
+
+Next, we determine the detection rate for genes across the study. To illustrate this idea, we create a small gene list (goi) to review.
+
+We can see that individual genes are detected to varying degrees in the segments, which leads us to the next QC we will perform across the dataset.
+
+```{r}
+
+
+#Detection Rate for O.1 filter
+
+library(scales) # for percent
+
+
+calc_detection_rate <- function(GeoMxObj = target_anat_all_0.1, LOQ_Mat = LOQ_Mat_all){
+  LOQ_Mat_0.1 <- LOQ_Mat[, colnames(GeoMxObj)]
+  fData(GeoMxObj)$DetectedSegments <- rowSums(LOQ_Mat_0.1, na.rm = TRUE)
+  fData(GeoMxObj)$DetectionRate <-
+    fData(GeoMxObj)$DetectedSegments / nrow(pData(GeoMxObj))
+  
+  return(GeoMxObj)
+}
+
+
+target_anat_all_0.1 <- calc_detection_rate(GeoMxObj = target_anat_all_0.1, LOQ_Mat = LOQ_Mat_all)
+target_anat_disc_0.1 <- calc_detection_rate(GeoMxObj = target_anat_disc_0.1, LOQ_Mat = LOQ_Mat_disc)
+target_anat_valid_0.1 <- calc_detection_rate(GeoMxObj = target_anat_valid_0.1, LOQ_Mat = LOQ_Mat_valid)
+
+
+```
+
+
+### 6.4 Gene Filtering
+
+We will graph the total number of genes detected in different percentages of segments. Based on the visualization below, we can better understand global gene detection in our study and select how many low detected genes to filter out of the dataset. Gene filtering increases performance of downstream statistical tests and improves interpretation of true biological signal.
+
+
+```{r}
+
+
+plot_detection_rate <- function(GeoMxObj = target_anat_all_0.1)
+  {plot_detect <- data.frame(Freq = c(1, 5, 10, 20, 30, 50))
+  plot_detect$Number <-
+      unlist(lapply(c(0.01, 0.05, 0.1, 0.2, 0.3, 0.5),
+                    function(x) {sum(fData(GeoMxObj)$DetectionRate >= x)}))
+  plot_detect$Rate <- plot_detect$Number / nrow(fData(GeoMxObj))
+  rownames(plot_detect) <- plot_detect$Freq
+  
+  plot <- ggplot(plot_detect, aes(x = as.factor(Freq), y = Rate, fill = Rate)) +
+      geom_bar(stat = "identity") +
+      geom_text(aes(label = formatC(Number, format = "d", big.mark = ",")),
+                vjust = 1.6, color = "black", size = 4) +
+      scale_fill_gradient2(low = "orange2", mid = "lightblue",
+                           high = "dodgerblue3", midpoint = 0.65,
+                           limits = c(0,1),
+                           labels = scales::percent) +
+      theme_bw() +
+      scale_y_continuous(labels = scales::percent, limits = c(0,1),
+                         expand = expansion(mult = c(0, 0))) +
+      labs(x = "% of Segments",
+           y = "Genes Detected, % of Panel > LOQ")
+  
+  return(plot)
+  
+}
+
+plot_detection_rate(GeoMxObj = target_anat_all_0.1) + ggtitle("All")
+
+plot_detection_rate(GeoMxObj = target_anat_disc_0.1)  + ggtitle("Discovery")
+
+plot_detection_rate(GeoMxObj = target_anat_valid_0.1)  + ggtitle("Validation")
+
+
+```
+We typically set a % Segment cutoff ranging from 5-20% based on the biological diversity of our dataset. For this study, we will select 10% as our cutoff. In other words, we will focus on the genes detected in at least 10% of our segments; we filter out the remainder of the targets.
+
+Note: if we know that a key gene is represented in only a small number of segments (\<10%) due to biological diversity, we may select a different cutoff or keep the target gene by manually selecting it for inclusion in the data object.
+
+
+```{r}
+
+gene_filter <- function(GeoMxObj = target_anat_all_0.1){
+  negativeProbefData <- subset(fData(GeoMxObj), CodeClass == "Negative")
+  neg_probes <- unique(negativeProbefData$TargetName)
+  GeoMxObj_new <- 
+      GeoMxObj[fData(GeoMxObj)$DetectionRate >= 0.1 |
+                          fData(GeoMxObj)$TargetName %in% neg_probes, ]
+  return(GeoMxObj_new)
+  }
+
+
+
+## ALL
+target_anat_all_0.1_genefilter <- gene_filter(GeoMxObj = target_anat_all_0.1)
+
+dim(target_anat_all_0.1_genefilter) - dim(target_anat_all_0.1)
+
+## 800 genes removed
+
+
+## Discovery
+target_anat_disc_0.1_genefilter <- gene_filter(GeoMxObj = target_anat_disc_0.1)
+
+dim(target_anat_disc_0.1_genefilter) - dim(target_anat_disc_0.1)
+
+## 786 genes removed
+
+
+## Validation
+
+target_anat_valid_0.1_genefilter <- gene_filter(GeoMxObj = target_anat_valid_0.1)
+
+dim(target_anat_valid_0.1_genefilter) - dim(target_anat_valid_0.1)
+
+## 813 genes removed
+
+
+
+
+```
+
+
+
+
+## 7. Optional: Export Pre-normalized Expression and Annotation Data
+
+
+#### FUNCT: print_anat_comp_annotations()
+
+The following functions takes the dataset and exports the columns 
+
+```{r}
+
+# 
+# print_anat_comp_annotations <- function(data = NULL,  file_path = ""){
+#   col_to_export = c("segment", "slide name", "region", "Patient")
+# 
+#   df_to_export <- pData(data)[, col_to_export] |>
+#     dplyr::rename(patient = Patient,
+#            full_name = `slide name`,
+#            SegmentLabel = segment,) |>
+#     mutate(
+#       region_num = fct_recode(region,
+#                               "1" = "Fimbria",
+#                               "2" = "Infundibulum",
+#                               "3" = "Ampulla",
+#                               "4" = "Isthmus")
+#     )
+# 
+#   openxlsx::write.xlsx(df_to_export, file_path, rowNames = TRUE, colNames = TRUE)
+# }
+
+```
+
+### 7.1 Export Annotations
+
+```{r}
+
+# 
+# print_anat_comp_annotations(target_anat_valid_0.1_genefilter, here::here("Validation_anatomical_comparison.xlsx"))
+# 
+# print_anat_comp_annotations(target_anat_all_0.1_genefilter, here::here("All_anatomical_comparison.xlsx"))
+```
+
+
+### FUNCT: print_TargetCountMatrix()
+
+The following functions takes the dataset and exports the columns 
+
+```{r}
+
+
+# print_TargetCountMatrix <- function(matrix = NULL, file_path = ""){
+#   wb <- createWorkbook()
+#   addWorksheet(wb, sheetName = "TargetCountMatrix")
+#   
+#   
+#   writeData(wb, sheet = "TargetCountMatrix", x = matrix, 
+#             colNames = TRUE, rowNames = TRUE)
+#   
+#   writeData(wb, sheet = "TargetCountMatrix", x = "TargetName", startCol = 1, startRow = 1)
+#   
+#   # Save the workbook to an Excel file
+#   saveWorkbook(wb, file = file_path, overwrite = TRUE)
+# }
+
+
+```
+
+### 7.2 Export Matrix
+
+
+```{r}
+# print_TargetCountMatrix(matrix = exprs(target_anat_valid_0.1_genefilter), 
+#                         file_path = here::here("Exprs_Validation_Anatomical_Comparison.xlsx"))
+# 
+# 
+# print_TargetCountMatrix(matrix = exprs(target_anat_all_0.1_genefilter), 
+#                         file_path = here::here("Exprs_All_Anatomical_Comparison.xlsx"))
+```
+
+
+
+## 8. Normalization
+
+We will now normalize the GeoMx data for downstream visualizations and differential expression. The two common methods for normalization of DSP-NGS RNA data are i) quartile 3 (Q3) or ii) background normalization.
+
+Both of these normalization methods estimate a normalization factor per segment to bring the segment data distributions together. More advanced methods for normalization and modeling are under active development. However, for most studies, these methods are sufficient for understanding differences between biological classes of segments and samples.
+
+Q3 normalization is typically the preferred normalization strategy for most DSP-NGS RNA studies. Given the low negative probe counts in this particular dataset as shown during Segment QC, we would further avoid background normalization as it may be less stable.
+
+Before normalization, we will explore the relationship between the upper quartile (Q3) of the counts in each segment with the geometric mean of the negative control probes in the data. Ideally, there should be a separation between these two values to ensure we have stable measure of Q3 signal. If you do not see sufficient separation between these values, you may consider more aggressive filtering of low signal segments/genes.
+
+```{r}
+
+quantileNorm <- function(object, toElt = "exprs_norm", fromElt = "exprs"){
+  # generate a new object with just relevant expression data
+  # exprs_data <- exprs(object)
+  
+  #rank each item in the object (1 for first expression level, 2 for second, etc.)
+  assayDataElement(object, "rank" , validate = TRUE) <- apply(assayDataElement(object, "exprs"),2,rank,ties.method="min")
+  
+  # #sort based on expression level
+  assayDataElement(object, "data_sorted" , validate = TRUE) <- apply(assayDataElement(object, "exprs"), 2, sort)
+
+  # find the mean for each row in the sorted_data
+  data_mean <- apply(assayDataElement(object, "data_sorted"), 1, mean)
+
+
+  index_to_mean <- function(my_index, my_mean)
+  {
+    return(my_mean[my_index])
+  }
+
+
+  # for each ranked data column, for each number (n) in that column, 
+  # apply to it the (nth) mean in the data_mean list
+  assayDataElement(object, toElt, validate = TRUE) <- apply(assayDataElement(object, "rank"), 2, index_to_mean, my_mean=data_mean)
+  
+
+  return(object)
+}
+```
+
+
+```{r}
+
+all_q_norm <- quantileNorm(target_anat_all_0.1_genefilter, toElt = "q_norm")
+
+disc_q_norm <- quantileNorm(target_anat_disc_0.1_genefilter, toElt = "q_norm")
+
+valid_q_norm <- quantileNorm(target_anat_valid_0.1_genefilter, toElt = "q_norm")
+
+```
+
+
+
+
+```{r}
+
+count_mat_valid_qnorm <- dplyr::count(pData(valid_q_norm), Patient, region, segment)
+
+kable(count_mat_valid_qnorm)
+
+
+```
+
+```{r}
+
+save(all_q_norm, file =
+       here::here("all_q_norm.Rdata"))
+
+
+save(disc_q_norm, file =
+       here::here("disc_q_norm.Rdata"))
+
+
+save(valid_q_norm, file =
+       here::here("valid_q_norm.Rdata"))
+
+
+```
+
+
+
+
+To demonstrate the effects of normalization, we graph representative box plots of the data for individual segments before and after normalization.
+
+```{r}
+
+compare_norm_plots <- function(GeoMxObj = all_q_norm){
+  boxplot(exprs(GeoMxObj)[,1:50],
+          col = "#9EDAE5", main = "Raw Counts",
+          log = "y", names = 1:50, xlab = "Segment",
+          ylab = "Counts, Raw")
+  
+  
+  boxplot(assayDataElement(GeoMxObj[,1:50], elt = "q_norm"),
+          col = "#2CA02C", main = "Quantile Norm Counts",
+          log = "y", names = 1:50, xlab = "Segment",
+          ylab = "Counts, Quantile Normalized")
+}
+
+compare_norm_plots(GeoMxObj = all_q_norm)
+
+compare_norm_plots(GeoMxObj = disc_q_norm)
+
+compare_norm_plots(GeoMxObj = valid_q_norm)
+```
+
+
+## 9. Unsupervised Analysis
+
+### 9.1 UMAP & t-SNE
+
+One common approach to understanding high-plex data is dimension reduction. Two common methods are UMAP and tSNE, which are non-orthogonally constrained projections that cluster samples based on overall gene expression. In this study, we see by either UMAP (from the umap package) or tSNE (from the Rtsne package), clusters of segments related to structure (glomeruli or tubules) and disease status (normal or diabetic kidney disease).
+
+```{r}
+# 
+# # update defaults for umap to contain a stable random_state (seed)
+# custom_umap <- umap::umap.defaults
+# custom_umap$random_state <- 42
+# 
+# 
+# umap_out2 <-
+#     umap(t(log2(assayDataElement(quantile_AnatCompData , elt = "q_norm"))),  
+#          config = custom_umap)
+# pData(quantile_AnatCompData)[, c("UMAP1", "UMAP2")] <- umap_out2$layout[, c(1,2)]
+# ggplot(pData(quantile_AnatCompData),
+#        aes(x = UMAP1, y = UMAP2, color = region, shape = segment)) +
+#     geom_point(size = 3) +
+#     theme_bw()+
+#   geom_mark_ellipse(aes(x = UMAP1, y = UMAP2, fill = Patient), inherit.aes = FALSE)
+
+```
+
+```{r fig.height=6, fig.width=8}
+
+# # run tSNE
+# set.seed(42) # set the seed for tSNE as well
+# 
+# 
+# tsne_out2 <-
+#     Rtsne(t(log2(assayDataElement(quantile_AnatCompData , elt = "q_norm"))),
+#           perplexity = ncol(quantile_AnatCompData)*.15)
+# pData(quantile_AnatCompData)[, c("tSNE1", "tSNE2")] <- tsne_out2$Y[, c(1,2)]
+# ggplot(pData(quantile_AnatCompData),
+#        aes(x = tSNE1, y = tSNE2)) +
+#     geom_point(aes( color = Patient, shape = segment), size = 3) +
+#     theme_bw()
+
+```
+
+### 9.2 Clustering high CV Genes
+
+Another approach to explore the data is to calculate the coefficient of variation (CV) for each gene ($$g$$) using the formula $$CV_g=SD_g/mean_g$$ . We then identify genes with high CVs that should have large differences across the various profiled segments. This unbiased approach can reveal highly variable genes across the study.
+
+We plot the results using unsupervised hierarchical clustering, displayed as a heatmap.
+
+
+```{r}
+
+# library(pheatmap)
+# assayDataElement(object = quantile_AnatCompData, elt = "log_q") <-
+#     assayDataApply(quantile_AnatCompData, 2, FUN = log, base = 2, elt = "q_norm")
+# 
+# # create CV function
+# calc_CV <- function(x) {sd(x) / mean(x)}
+# CV_dat <- assayDataApply(quantile_AnatCompData,
+#                          elt = "log_q", MARGIN = 1, calc_CV)
+# # show the highest CD genes and their CV values
+# sort(CV_dat, decreasing = TRUE)[1:5]
+# #>   CAMK2N1    AKR1C1      AQP2     GDF15       REN 
+# #> 0.5886006 0.5114973 0.4607206 0.4196469 0.4193216
+# 
+# # Identify genes in the top 3rd of the CV values
+# GOI <- names(CV_dat)[CV_dat > quantile(CV_dat, 0.8)]
+# pheatmap(assayDataElement(quantile_AnatCompData[GOI, ], elt = "log_q"),
+#          scale = "row", 
+#          show_rownames = FALSE, show_colnames = FALSE,
+#          border_color = NA,
+#          clustering_method = "average",
+#          clustering_distance_rows = "correlation",
+#          clustering_distance_cols = "correlation",
+#          breaks = seq(-3, 3, 0.05),
+#          color = colorRampPalette(c("red", "yellow2", "green3"))(120),
+#          annotation_col = 
+#              pData(target_AnatCompData)[, c("Patient", "segment", "region")])
+# 
+
+```
+
