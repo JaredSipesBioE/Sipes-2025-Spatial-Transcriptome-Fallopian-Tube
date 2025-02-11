@@ -515,41 +515,324 @@ wrap_elements(top_1) / (GO_plots$disc$sec$fim_v_inf + GO_plots$disc$sec$fim_v_am
 
 Supplementary Figure 3 – Pairwise Comparisons of all Regions (Discovery Dataset).
 
+Generate all pairwise comparisons for the discovery dataset for both secretory and ciliated cells. 
+
+
+```{r fig.width=18, fig.height=18}
+
+
+df1 <- pairwise_comparisons$valid$sec
+
+df2 <- pairwise_comparisons$valid$cil
+
+
+# cil_fim_v_inf <- get_common_genes(df_1 = df1$fim_v_inf, df_2 = df2$fim_v_inf, type = "both", FC_cutoff = 0.2)
+# cil_fim_v_amp <- get_common_genes(df_1 = df1$fim_v_amp, df_2 = df2$fim_v_amp, type = "both", FC_cutoff = 0.2)
+# cil_fim_v_isth <- get_common_genes(df_1 = df1$fim_v_isth, df_2 = df2$fim_v_isth, type = "both", FC_cutoff = 0.2)
+# cil_inf_v_amp <- get_common_genes(df_1 = df1$inf_v_amp, df_2 = df2$inf_v_amp, type = "both", FC_cutoff = 0.2)
+# cil_inf_v_isth <- get_common_genes(df_1 = df1$inf_v_isth, df_2 = df2$inf_v_isth, type = "both", FC_cutoff = 0.2)
+# cil_amp_v_isth <- get_common_genes(df_1 = df1$amp_v_isth, df_2 = df2$amp_v_isth, type = "both", FC_cutoff = 0.2)
+
+
+
+title = 20
+n_genes = 20
+lab_size = 5
+
+
+# DISCOVERY 
+a <- volcano_plot(df = df1$fim_v_inf, 
+                 title_name = "Fim v Inf, Secretory, Discovery", 
+                 title_size = title, upreg = "Fimbria", downreg = "Infundibulum"
+                 # highlight_genes = cil_fim_v_inf
+                 ) |> add_labels(df = df1$fim_v_inf, n_genes = n_genes, lab_size = lab_size) |> remove_legend()
+
+
+b <- volcano_plot(df = df1$fim_v_amp, 
+                 title_name = "Fim v Amp, Secretory, Discovery", 
+                 title_size = title, upreg = "Fimbria", downreg = "Ampulla"
+                 # highlight_genes = cil_fim_v_amp
+                 ) |> add_labels(df = df1$fim_v_amp, n_genes = n_genes, lab_size = lab_size)
+
+c <- volcano_plot(df = df1$fim_v_isth, 
+                 title_name = "Fim v Isth, Secretory, Discovery", 
+                 title_size = title, upreg = "Fimbria", downreg = "Isthmus"
+                 # highlight_genes = cil_fim_v_isth
+                 ) |> add_labels(df = df1$fim_v_isth, n_genes = n_genes, lab_size = lab_size)
+
+d <- volcano_plot(df = df1$inf_v_amp, 
+                 title_name = "Inf v Amp, Secretory, Discovery", 
+                 title_size = title, upreg = "Infundibulum", downreg = "Ampulla"
+                 # highlight_genes = cil_inf_v_amp
+                 ) |> add_labels(df = df1$inf_v_amp, n_genes = n_genes, lab_size = lab_size) |> remove_legend()
+
+
+e <- volcano_plot(df = df1$inf_v_isth, 
+                 title_name = "Inf v Isth, Secretory, Discovery", 
+                 title_size = title, upreg = "Infundibulum", downreg = "Isthmus"
+                 # highlight_genes = cil_inf_v_isth
+                 ) |> add_labels(df = df1$inf_v_isth, n_genes = n_genes, lab_size = lab_size)
+
+f <- volcano_plot(df = df1$amp_v_isth, 
+                 title_name = "Amp v Isth, Secretory, Discovery", 
+                 title_size = title, upreg = "Ampulla", downreg = "Isthmus"
+                 # highlight_genes = cil_amp_v_isth
+                 ) |> add_labels(df = df1$amp_v_isth, n_genes = n_genes, lab_size = lab_size)
+
+
+# Validation
+
+g <- volcano_plot(df = df2$fim_v_inf, 
+                 title_name = "Fimb v Inf, Ciliated, Discovery", 
+                 title_size = title, upreg = "Fimbria", downreg = "Infundibulum"
+                 # highlight_genes = cil_fim_v_inf
+                 ) |> add_labels(df = df2$fim_v_inf, n_genes = n_genes, lab_size = lab_size) |> remove_legend()
+
+
+h <- volcano_plot(df = df2$fim_v_amp, 
+                 title_name = "Fimb v Amp, Ciliated, Discovery", 
+                 title_size = title, upreg = "Fimbria", downreg = "Ampulla"
+                 # highlight_genes = cil_fim_v_amp
+                 ) |> add_labels(df = df2$fim_v_amp, n_genes = n_genes, lab_size = lab_size)
+
+i <- volcano_plot(df = df2$fim_v_isth, 
+                 title_name = "Fimb v Isth, Ciliated, Discovery", 
+                 title_size = title, upreg = "Fimbria", downreg = "Isthmus"
+                 # highlight_genes = cil_fim_v_isth
+                 ) |> add_labels(df = df2$fim_v_isth, n_genes = n_genes, lab_size = lab_size)
+
+j <- volcano_plot(df = df2$inf_v_amp, 
+                 title_name = "Inf v Amp, Ciliated, Discovery", 
+                 title_size = title, upreg = "Infundibulum", downreg = "Ampulla"
+                 # highlight_genes = cil_inf_v_amp
+                 ) |> add_labels(df = df2$inf_v_amp, n_genes = n_genes, lab_size = lab_size) |> remove_legend()
+
+
+k <- volcano_plot(df = df2$inf_v_isth, 
+                 title_name = "Inf v Isth, Ciliated, Discovery", 
+                 title_size = title, upreg = "Infundibulum", downreg = "Isthmus"
+                 # highlight_genes = cil_inf_v_isth
+                 ) |> add_labels(df = df2$inf_v_isth, n_genes = n_genes, lab_size = lab_size)
+
+l <- volcano_plot(df = df2$amp_v_isth, 
+                 title_name = "Amp v Isth, Ciliated, Discovery", 
+                 title_size = title, upreg = "Ampulla", downreg = "Isthmus"
+                 # highlight_genes = cil_amp_v_isth
+                 ) |> add_labels(df = df2$amp_v_isth, n_genes = n_genes, lab_size = lab_size)
+
+
+top <-   grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Discovery Dataset, Secretory Cells', gp=gpar(fontsize=25)))
+
+bottom <- grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Discovery Dataset, Ciliated Cells', gp=gpar(fontsize=25)))
+
+wrap_elements(top) / ((a | b | c ) / (d | e | f)) / wrap_elements(bottom) / ((g | h | i ) / (j | k | l)) + plot_layout(heights = c(1,15,1,15), guides = "collect") + plot_annotation(tag_levels = list(c("", "a", "b", "c", "d", "e", "f", "", "g", "h", "i", "j", "k", "l"))) & 
+  theme(plot.tag = element_text(size = 26))
+
+
+```
 
 
 
 
+#S4.Pairwise Comparisons volcano plots (Validation Cohort).
 
-#S4.Pairwise Comparisons volcano plots (Validation Dataset).
+
+Supplementary Figure 4  – Pairwise Comparisons of all Regions (Validation Cohort).
 
 
-Supplementary Figure 4  – Pairwise Comparisons of all Regions (Validation Dataset).
+```{r fig.width=18, fig.height=18}
+
+
+df1 <- pairwise_comparisons$valid$sec
+
+df2 <- pairwise_comparisons$valid$cil
+
+
+# cil_fim_v_inf <- get_common_genes(df_1 = df1$fim_v_inf, df_2 = df2$fim_v_inf, type = "both", FC_cutoff = 0.2)
+# cil_fim_v_amp <- get_common_genes(df_1 = df1$fim_v_amp, df_2 = df2$fim_v_amp, type = "both", FC_cutoff = 0.2)
+# cil_fim_v_isth <- get_common_genes(df_1 = df1$fim_v_isth, df_2 = df2$fim_v_isth, type = "both", FC_cutoff = 0.2)
+# cil_inf_v_amp <- get_common_genes(df_1 = df1$inf_v_amp, df_2 = df2$inf_v_amp, type = "both", FC_cutoff = 0.2)
+# cil_inf_v_isth <- get_common_genes(df_1 = df1$inf_v_isth, df_2 = df2$inf_v_isth, type = "both", FC_cutoff = 0.2)
+# cil_amp_v_isth <- get_common_genes(df_1 = df1$amp_v_isth, df_2 = df2$amp_v_isth, type = "both", FC_cutoff = 0.2)
+
+
+
+title = 20
+n_genes = 20
+lab_size = 5
+
+
+# DISCOVERY 
+a <- volcano_plot(df = df1$fim_v_inf, 
+                 title_name = "Fim v Inf, Secretory, Validation", 
+                 title_size = title, upreg = "Fimbria", downreg = "Infundibulum"
+                 # highlight_genes = cil_fim_v_inf
+                 ) |> add_labels(df = df1$fim_v_inf, n_genes = n_genes, lab_size = lab_size) |> remove_legend()
+
+
+b <- volcano_plot(df = df1$fim_v_amp, 
+                 title_name = "Fim v Amp, Secretory, Validation", 
+                 title_size = title, upreg = "Fimbria", downreg = "Ampulla"
+                 # highlight_genes = cil_fim_v_amp
+                 ) |> add_labels(df = df1$fim_v_amp, n_genes = n_genes, lab_size = lab_size)
+
+c <- volcano_plot(df = df1$fim_v_isth, 
+                 title_name = "Fim v Isth, Secretory, Validation", 
+                 title_size = title, upreg = "Fimbria", downreg = "Isthmus"
+                 # highlight_genes = cil_fim_v_isth
+                 ) |> add_labels(df = df1$fim_v_isth, n_genes = n_genes, lab_size = lab_size)
+
+d <- volcano_plot(df = df1$inf_v_amp, 
+                 title_name = "Inf v Amp, Secretory, Validation", 
+                 title_size = title, upreg = "Infundibulum", downreg = "Ampulla"
+                 # highlight_genes = cil_inf_v_amp
+                 ) |> add_labels(df = df1$inf_v_amp, n_genes = n_genes, lab_size = lab_size) |> remove_legend()
+
+
+e <- volcano_plot(df = df1$inf_v_isth, 
+                 title_name = "Inf v Isth, Secretory, Validation", 
+                 title_size = title, upreg = "Infundibulum", downreg = "Isthmus"
+                 # highlight_genes = cil_inf_v_isth
+                 ) |> add_labels(df = df1$inf_v_isth, n_genes = n_genes, lab_size = lab_size)
+
+f <- volcano_plot(df = df1$amp_v_isth, 
+                 title_name = "Amp v Isth, Secretory, Validation", 
+                 title_size = title, upreg = "Ampulla", downreg = "Isthmus"
+                 # highlight_genes = cil_amp_v_isth
+                 ) |> add_labels(df = df1$amp_v_isth, n_genes = n_genes, lab_size = lab_size)
+
+
+# Validation
+
+g <- volcano_plot(df = df2$fim_v_inf, 
+                 title_name = "Fimb v Inf, Ciliated, Validation", 
+                 title_size = title, upreg = "Fimbria", downreg = "Infundibulum"
+                 # highlight_genes = cil_fim_v_inf
+                 ) |> add_labels(df = df2$fim_v_inf, n_genes = n_genes, lab_size = lab_size) |> remove_legend()
+
+
+h <- volcano_plot(df = df2$fim_v_amp, 
+                 title_name = "Fimb v Amp, Ciliated, Validation", 
+                 title_size = title, upreg = "Fimbria", downreg = "Ampulla"
+                 # highlight_genes = cil_fim_v_amp
+                 ) |> add_labels(df = df2$fim_v_amp, n_genes = n_genes, lab_size = lab_size)
+
+i <- volcano_plot(df = df2$fim_v_isth, 
+                 title_name = "Fimb v Isth, Ciliated, Validation", 
+                 title_size = title, upreg = "Fimbria", downreg = "Isthmus"
+                 # highlight_genes = cil_fim_v_isth
+                 ) |> add_labels(df = df2$fim_v_isth, n_genes = n_genes, lab_size = lab_size)
+
+j <- volcano_plot(df = df2$inf_v_amp, 
+                 title_name = "Inf v Amp, Ciliated, Validation", 
+                 title_size = title, upreg = "Infundibulum", downreg = "Ampulla"
+                 # highlight_genes = cil_inf_v_amp
+                 ) |> add_labels(df = df2$inf_v_amp, n_genes = n_genes, lab_size = lab_size) |> remove_legend()
+
+
+k <- volcano_plot(df = df2$inf_v_isth, 
+                 title_name = "Inf v Isth, Ciliated, Validation", 
+                 title_size = title, upreg = "Infundibulum", downreg = "Isthmus"
+                 # highlight_genes = cil_inf_v_isth
+                 ) |> add_labels(df = df2$inf_v_isth, n_genes = n_genes, lab_size = lab_size)
+
+l <- volcano_plot(df = df2$amp_v_isth, 
+                 title_name = "Amp v Isth, Ciliated, Validation", 
+                 title_size = title, upreg = "Ampulla", downreg = "Isthmus"
+                 # highlight_genes = cil_amp_v_isth
+                 ) |> add_labels(df = df2$amp_v_isth, n_genes = n_genes, lab_size = lab_size)
+
+
+top <-   grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Validation Dataset, Secretory Cells', gp=gpar(fontsize=25)))
+
+bottom <- grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Validation Dataset, Ciliated Cells', gp=gpar(fontsize=25)))
+
+wrap_elements(top) / ((a | b | c ) / (d | e | f)) / wrap_elements(bottom) / ((g | h | i ) / (j | k | l)) + plot_layout(heights = c(1,15,1,15), guides = "collect") + plot_annotation(tag_levels = list(c("", "a", "b", "c", "d", "e", "f", "", "g", "h", "i", "j", "k", "l"))) & 
+  theme(plot.tag = element_text(size = 26))
+
+
+```
 
 
 #S5. Regional comparison volcano plots (validation dataset)
 
 
-Supplemental Figure 5 - Regional comparison volcano plots showing transcripts upregulated and downregulated in secretory and ciliated ROIs in the validation dataset
+Supplementary Figure 5. Regional comparison volcano plots showing transcripts upregulated and downregulated in secretory and ciliated ROIs in the validation cohort.
+
+```{r fig.height=3.75, fig.width=4.95}
+
+valid_sec <- one_v_other$valid$sec
+
+volcano_plot(df = valid_sec$fim_v_other, 
+                 title_name = "Fimbria Secretory Cells, Validation", title_size = title, upreg = "Fimbria", downreg = "Others"
+                 ) |> add_labels(df = valid_sec$fim_v_other, n_genes = 15) |> remove_legend()
+  
+volcano_plot(df = valid_sec$inf_v_other, 
+                 title_name = "Infundibulum Secretory Cells, Validation", title_size = title, upreg = "Infundibulum", downreg = "Others"
+                 ) |> add_labels(df = valid_sec$inf_v_other, n_genes = 15) |> remove_legend()
+
+volcano_plot(df = valid_sec$amp_v_other, 
+                 title_name = "Ampulla Secretory Cells, Validation", title_size = title, upreg = "Ampulla", downreg = "Others"
+                 ) |> add_labels(df = valid_sec$amp_v_other, n_genes = 15) |> remove_legend()
+
+volcano_plot(df = valid_sec$isth_v_other, 
+                 title_name = "Isthmus Secretory Cells, Validation", title_size = title, upreg = "Isthmus", downreg = "Others"
+                 ) |> add_labels(df = valid_sec$isth_v_other, n_genes = 15) |> remove_legend()
 
 
-# S6. 
+
+valid_cil <- one_v_other$valid$cil
+
+volcano_plot(df = valid_cil$fim_v_other, 
+                 title_name = "Fimbria Ciliated Cells, Validation", title_size = title, upreg = "Fimbria", downreg = "Others"
+                 ) |> add_labels(df = valid_cil$fim_v_other, n_genes = 15) |> remove_legend()
+  
+volcano_plot(df = valid_cil$inf_v_other, 
+                 title_name = "Infundibulum Ciliated Cells, Validation", title_size = title, upreg = "Infundibulum", downreg = "Others"
+                 ) |> add_labels(df = valid_cil$inf_v_other, n_genes = 15) |> remove_legend()
+
+volcano_plot(df = valid_cil$amp_v_other, 
+                 title_name = "Ampulla Ciliated Cells, Validation", title_size = title, upreg = "Ampulla", downreg = "Others"
+                 ) |> add_labels(df = valid_cil$amp_v_other, n_genes = 15) |> remove_legend()
+
+volcano_plot(df = valid_cil$isth_v_other, 
+                 title_name = "Isthmus Ciliated Cells, Validation", title_size = title, upreg = "Isthmus", downreg = "Others"
+                 ) |> add_labels(df = valid_cil$isth_v_other, n_genes = 15) |> remove_legend()
+```
+
+
+
+# S6. Markers of Mature Ciliated Cells up in distal FT
 
 
 Supplemental Figure 6 – Markers of Mature Ciliated Cells are upregulated in the distal fallopian tube
 
 
+
+
+
 # S7. Other MHC II Transcripts
+
+Supplementary Figure 7. Other MHC-II Transcripts in the FT epithelium.
+
+
 
 
 
 # S8. Analysis of other FT transcriptome data
 
-Analysis of publically avaiable FT transcriptome datasets.
+Supplementary Figure 8. Multiple datasets show MHC-II transcript expression varies throughout the menstrual cycle and is inversely correlated with OVGP1.
 
-analysis performed seperately. See Sowamber analysis and Ulrich analysis notebooks for details. 
+Analysis of publicly available FT transcriptome datasets.
+
+analysis performed separately. See Sowamber analysis and Ulrich analysis notebooks for details. 
 
 
-# S9. Markers of peg cells
+
+
+# S9. Peg cell markers elevated in the interior FT during follicular phase.
+
+Supplementary Figure 9. Peg cell markers elevated in the interior FT during follicular phase.
 
 
 
@@ -730,6 +1013,8 @@ s9_amp_v_isth <- volcano_plot(df = disc_amp.v.isth, title_name = "Ampulla vs Ist
 
 ## S9.3 boxplots
 
+
+
 ```{r fig.height=25, fig.width=25}
 
 
@@ -756,12 +1041,12 @@ make_figs9_boxplots <- function(genes = Fig5_genes, dataset = all_q_norm, title 
 
 # Create all of the Boxplots for the Discovery Dataset
 
-fs9_disc <- make_fig5_boxplots(genes = peg_markers_s9 , dataset = disc_q_norm)
+fs9_disc <- make_figs9_boxplots(genes = peg_markers_s9 , dataset = disc_q_norm)
 names(fs9_disc) <- peg_markers_s9
 
 # Create all of the Boxplots for the Validation Dataset
 
-fs9_valid <- make_fig5_boxplots(genes = peg_markers_s9 , dataset = valid_q_norm)
+fs9_valid <- make_figs9_boxplots(genes = peg_markers_s9 , dataset = valid_q_norm)
 names(fs9_valid) <- peg_markers_s9
 
 
@@ -813,6 +1098,64 @@ legend_valid <- make_boxplot_legend(dataset = valid_q_norm)
 # S10. Hormone receptors and associated transc factors
 
 Supplemental Figure 9 – Hormone Receptors and associated Pioneer Transcription Factors show fluctuating expression across fallopian tube  driven by the menstrual cycle
+
+
+
+```{r}
+# This function makes all of the boxplots for figure S10 according to the same specifications
+
+
+FigS10_gene_list <- c("ESR1", "PGR", "AR", "FOXA2", "PBX1")
+
+make_figS10 <- function(genes = FigS10_gene_list, dataset = all_q_norm, title = "All"){
+
+  graphs_up_Fig <- lapply(X = genes, FUN = Cil_v_Sec_Anat_Boxplot_Points, dataset = dataset)
+  
+  Fig_resize <- lapply(graphs_up_Fig, adj_text_size, pnt = 17)
+  Fig_remove_legend <- lapply(Fig_resize, remove_legend)
+  Fig_sig <- lapply(Fig_remove_legend, add_sig, pnt = 4)
+
+  return(Fig_sig)
+  
+  }
+
+
+# Create all of the Boxplots for the Discovery Dataset
+
+FS10_disc <- make_figS10(genes = FigS10_gene_list , dataset = disc_q_norm)
+names(FS10_disc) <- FigS10_gene_list
+
+# Create all of the Boxplots for the Validation Dataset
+
+FS10_valid <- make_figS10(genes = FigS10_gene_list , dataset = valid_q_norm)
+names(FS10_valid) <- FigS10_gene_list
+
+```
+
+
+
+```{r fig.height=12, fig.width=24}
+
+# create grobs
+top <-   grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Discovery Dataset: Hormone Receptors and Associated Pioneer Transcription Factors', gp=gpar(fontsize=25)))
+
+bottom <- grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Validation Dataset: Hormone Receptors and Associated Pioneer Transcription Factors', gp=gpar(fontsize=25)))
+
+
+
+  wrap_elements(top) / 
+  (FS10_disc$ESR1 | FS10_disc$PGR |  FS10_disc$AR | FS10_disc$FOXA2 | FS10_disc$PBX1) /
+  legend_disc /
+  wrap_elements(bottom) / 
+  (FS10_valid$ESR1 | FS10_valid$PGR |  FS10_valid$AR | FS10_valid$FOXA2 | FS10_valid$PBX1) /
+  legend_valid +
+  plot_layout(heights = c(0.5, 4, 0.5, 0.5, 4, 0.5)) 
+
+
+
+
+```
+
 
 
 
