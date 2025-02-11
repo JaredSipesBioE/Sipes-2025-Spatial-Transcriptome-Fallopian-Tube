@@ -111,6 +111,8 @@ library(patchwork)
 library(cowplot)
 library(grid)
 
+library(tidyr)
+
 ```
 
 
@@ -809,6 +811,346 @@ wrap_elements(free(picture_3A) | fim_v_isth_disc | fim_v_isth_valid) /
 
 
 
+# F4. Figure 4: Adhesion, ROS and Apoptosis Related
 
 
 
+## FUNCT: make_fig4()
+
+This create boxplots formatted for figure 4. 
+
+
+```{r}
+
+# This function makes all of the boxplots for figure 4 according to the same specifications
+
+make_fig4 <- function(genes = Fig4_gene_list, dataset = all_q_norm, title = "All"){
+
+  graphs_up_Fig <- lapply(X = genes, FUN = Cil_v_Sec_Anat_Boxplot_Points, dataset = dataset)
+  
+  Fig_resize <- lapply(graphs_up_Fig, adj_text_size, pnt = 17)
+  Fig_remove_legend <- lapply(Fig_resize, remove_legend)
+  Fig_sig <- lapply(Fig_remove_legend, add_sig, pnt = 4)
+
+  return(Fig_sig)
+  
+  }
+```
+
+
+## Create fig4 boxplots
+
+```{r Make all Gene Comparisons, fig.height=22, fig.width=20}
+
+# List of 12 genes to be included in the Figure 4 Boxplots
+
+Fig4_gene_list <- c("ESR1", "PGR", "AR", "FOXA2", "CDH1", "CDH3", "CD99", "LGALS3", "PRDX5", "TXNIP", "GAS1", "BAD", "FOXA1", "FOXA2", "PBX1", "ANXA1", "WT1", "BIRC3", "TNFSF10")
+
+  
+
+# Create all of the Boxplots for the Discovery Dataset
+
+F4_disc <- make_fig4(genes = Fig4_gene_list , dataset = disc_q_norm)
+names(F4_disc) <- Fig4_gene_list
+
+# Create all of the Boxplots for the Validation Dataset
+
+F4_valid <- make_fig4(genes = Fig4_gene_list , dataset = valid_q_norm)
+names(F4_valid) <- Fig4_gene_list
+
+
+# Create Grobs for use as labels
+
+top_1 <-   grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Discovery Dataset: Cell-Cell Adhesion Transcripts', gp=gpar(fontsize=25)))
+
+bottom_1 <- grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Validation Dataset: Cell-Cell Adhesion Transcripts', gp=gpar(fontsize=25)))
+
+
+top_2 <-   grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Discovery Dataset: ROS and Apoptosis Related Transcripts', gp=gpar(fontsize=25)))
+
+bottom_2 <- grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Validation Dataset: ROS and Apoptosis Related Transcripts', gp=gpar(fontsize=25)))
+
+
+  # Part 1 - Cell Cell Adhesion
+  wrap_elements(top_1) / 
+  (F4_disc$CDH1 | F4_disc$CDH3 |  F4_disc$CD99 | F4_disc$LGALS3) /
+  legend_disc /
+  wrap_elements(bottom_1) / 
+  (F4_valid$CDH1 | F4_valid$CDH3 |  F4_valid$CD99 | F4_valid$LGALS3) /
+  legend_valid /
+  # Part 2 - ROS and Apoptosis related  
+  wrap_elements(top_2) / 
+  (F4_disc$PRDX5 | F4_disc$TXNIP |  F4_disc$BAD | F4_disc$GAS1) /
+  legend_disc /
+  wrap_elements(bottom_2) / 
+  (F4_valid$PRDX5 | F4_valid$TXNIP |  F4_valid$BAD | F4_valid$GAS1) /
+  legend_valid +
+    
+    plot_layout(heights = c(0.5, 4, 0.5, 0.5, 4, 0.5, 0.5, 4, 0.5, 0.5, 4, 0.5))  
+    
+    # plot_annotation(tag_levels = list(c("", "a", "b", "c", "d", 
+    #                                     "", "", "e", "f", "g", "h", 
+    #                                     "", "","i", "j", "k", "l", 
+    #                                     "", "", "m", "n", "o", "p", "")), 
+    #                                theme = theme(plot.tag = element_text(size = 30, face = "bold")))
+
+
+
+
+
+```
+
+
+
+
+# F5. Figure 5: MHC-II related transcripts
+
+
+## Load OVGP1 Data
+
+```{r}
+
+#read in from excel
+OVGP1_percent <- read_xlsx(path = paste0(getwd(), "/IHC_analysis/OVGP1 Percentages.xlsx"))
+
+# adjust to tidy data format
+OVGP1 <- OVGP1_percent |> pivot_longer(cols = c("Fim", "Inf", "Amp", "Isth"), names_to = "region", values_to = "percent") |> mutate(percent = as.numeric(percent))
+
+# factor region 
+OVGP1$region <- OVGP1$region |> factor(levels = c("Fim", "Inf", "Amp", "Isth"))
+
+# remove slides not in GeoMx dataset 
+OVGP1_subset <- OVGP1[OVGP1$patient_ID %in% unique(pData(all_q_norm)$patient_ID),]
+
+
+# this is necessary to merge with the GeoMx Object. 
+OVGP1_subset <- transform(OVGP1_subset, patient_ID = as.double(patient_ID))
+
+
+# merge OVGP1 data
+pData(all_q_norm) <- pData(all_q_norm) |> left_join(OVGP1_subset |> select(region, patient_ID, percent), by = c("region", "patient_ID"))
+
+```
+
+
+
+
+
+### FUNCT: compare_OVGP1()
+
+```{r}
+
+compare_OVGP1 <- function(dataset = all_q_norm, gene = "HLA-DRA", title_append = "Expression Inversely Correlates with Percentage OVGP1+ Cells"){
+  # get expression of selected gene 
+  
+  gene_vector <- as.vector(assayDataElement(dataset, elt = "q_norm")[gene, ])
+
+  plot <- ggplot(data = pData(dataset), aes(x = percent, y = gene_vector))+
+    geom_point(aes(color = Patient))+
+    labs(title = TeX(paste0("\\textit{", gene, "} ", title_append)), 
+         y = TeX(paste0("\\textit{", gene, "} ", "Expression (GeoMx)")),
+         x = "Percent OVGP1+ Cells in Region (IHC staining)")+
+    geom_smooth(formula = y ~ x, method = "lm")+ 
+    stat_cor(method="pearson", size = 5)+
+    theme_classic()
+
+  return(plot)
+}
+
+```
+
+
+
+### FUNCT: calc_pearson(), calc_pearson_sig()
+
+```{r}
+
+# estimate the value of the pearson correlation of all genes compared to the selected gene
+
+calc_pearson <- function(dataset = all_q_norm, gene ="ESR1"){
+  
+  # get expression data for the 
+  
+  expression_data <- assayDataElement(dataset, elt = "q_norm")
+  
+  # get expression data for just the gene of interest
+  target_expression <- assayDataElement(dataset, elt = "q_norm")[gene, ]
+  
+  correlations <- apply(expression_data, 1, 
+                        function(gene_expression){
+                          # function to compare correlation between gene and target selected
+                          cor(gene_expression, target_expression, method = "pearson")
+                          }
+                        )
+  
+  return(correlations)
+}
+
+
+
+# estimate the **significance** (p-value) of the pearson correlation of all genes compared to the selected gene
+
+
+calc_pearson_sig <- function(dataset = all_q_norm, gene ="ESR1"){
+  
+  # get expression data for the 
+  
+  expression_data <- assayDataElement(dataset, elt = "q_norm")
+  
+  # get expression data for just the gene of interest
+  target_expression <- assayDataElement(dataset, elt = "q_norm")[gene, ]
+  
+  correlations <- apply(expression_data, 1, 
+                        function(gene_expression){
+                          # function to compare correlation between gene and target selected
+                          cor.test(gene_expression, target_expression, method = "pearson")$p.value
+                          }
+                        )
+  
+  return(correlations)
+}
+```
+
+
+
+### FUNCT: corr_plot(), corr_plot_pairs()
+
+plots correlation with pearson value and p-value for selected genes. 
+
+```{r}
+
+# this function plots correlation given a dataset and two genes to compare
+
+corr_plot <- function(dataset = all_q_norm, gene_x = "ESR1", gene_y = "CXXC5", title_append = ""){
+  
+  # for whatever reason, x_vector and y_vector cannot be placed inside the aes() function as is and must be computed first. 
+  # I have no idea why
+  
+  x_vector <- as.vector(assayDataElement(dataset, elt = "q_norm")[gene_x, ])
+  y_vector <- as.vector(assayDataElement(dataset, elt = "q_norm")[gene_y, ])
+  
+  plot <- ggplot(
+    pData(dataset), 
+    aes(x = x_vector,
+        y = y_vector
+          )
+      )+
+  geom_point()+
+  geom_smooth(formula = y ~ x, method = "lm")+ 
+  stat_cor(method="pearson", size = 5)+ 
+  labs(title= paste0(gene_x, " versus ", gene_y, title_append),
+       x=gene_x, y = gene_y)+
+  theme_classic()
+  
+  return(plot)
+}
+
+# this function create a paired graph of correlations for the discovery and validation datasets
+
+
+corr_plot_pairs <- function(dataset1 = disc_q_norm, dataset2 = valid_q_norm, gene_x = "ESR1", gene_y = "CXXC5"){
+  plot1 <- corr_plot(dataset = dataset1, gene_x = gene_x, gene_y = gene_y, title_append = ", Discovery")
+  plot2 <- corr_plot(dataset = dataset2, gene_x = gene_x, gene_y = gene_y, title_append = ", Validation")
+  
+  plot_together <- plot1 + plot2
+  
+  return(plot_together)
+  
+  
+}
+
+```
+
+
+
+
+
+### Create all OVGP1 / HLA Correlations
+
+
+```{r}
+
+fig5_genes <- c("HLA-DPA1", "HLA-DPB1", "HLA-DRA", "HLA-DRB", "HLA-DRB3", "HLA-DRB4", "HLA-DQA1", "HLA-DQB1", "HLA-DMA", "HLA-DMB", "HLA-DOA", "CD74", "ESR1", "PGR")
+
+OVGP1_corr <- lapply(fig5_genes, compare_OVGP1, dataset = all_q_norm, title_append = "Expression v % OVGP1+ Cells") |>
+  lapply(adj_text_size, pnt = 17)
+
+names(OVGP1_corr) <- fig5_genes
+
+
+```
+
+
+
+### Create Figure 5
+
+```{r fig.height=20, fig.width=20}
+
+fig5_genes <- c("HLA-DPA1", "HLA-DPB1", "HLA-DRA", "HLA-DRB", "HLA-DRB3", "HLA-DRB4", 
+                "HLA-DQA1", "HLA-DQB1", "HLA-DMA", "HLA-DMB", "HLA-DOA", "CD74", "C2", "C4B", "CFB")
+
+
+make_fig5_boxplots <- function(genes = Fig5_genes, dataset = all_q_norm, title = "All"){
+
+  graphs <- lapply(X = genes, FUN = Cil_v_Sec_Anat_Boxplot_Points, dataset = dataset)
+  
+  # resize
+  graph_resize <- lapply(graphs, adj_text_size, pnt = 17)
+  graph_remove_legend <- lapply(graph_resize, remove_legend)
+  graph_sig <- lapply(graph_remove_legend, add_sig, pnt = 4)
+
+  return(graph_sig)
+  
+  }
+
+
+# Create all of the Boxplots for the Discovery Dataset
+
+f5_disc <- make_fig5_boxplots(genes = fig5_genes , dataset = disc_q_norm)
+names(f5_disc) <- fig5_genes
+
+# Create all of the Boxplots for the Validation Dataset
+
+f5_valid <- make_fig5_boxplots(genes = fig5_genes , dataset = valid_q_norm)
+names(f5_valid) <- fig5_genes
+
+
+# Create Grobs for use as labels
+
+top <-   grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Discovery Dataset: MHC-II transcripts', gp=gpar(fontsize=25)))
+
+bottom <- grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Validation Dataset: MHC-II transcripts', gp=gpar(fontsize=25)))
+
+# create legends
+
+legend_disc <- make_boxplot_legend(dataset = disc_q_norm)
+
+legend_valid <- make_boxplot_legend(dataset = valid_q_norm)
+
+# merge guides on OVGP1 comparison plots
+
+OVGP1_plots <- remove_legend(OVGP1_corr$`HLA-DRA`) | remove_legend(OVGP1_corr$`HLA-DPA1`) | OVGP1_corr$`HLA-DQA1`
+
+  # Part 1 - disc MHCII Transcripts
+  wrap_elements(top) / 
+  (f5_disc$`HLA-DRA` | f5_disc$`HLA-DRB` |  f5_disc$`HLA-DPA1` | f5_disc$`HLA-DQA1`) /
+  legend_disc /
+  # Part 2 - valid MHCII Transcripts  
+  wrap_elements(bottom) / 
+  (f5_valid$`HLA-DRA` | f5_valid$`HLA-DRB` |  f5_valid$`HLA-DPA1` | f5_valid$`HLA-DQA1`) /
+  legend_valid /
+  # Part 3 OVGP1 plots
+  OVGP1_plots+
+    
+    plot_layout(heights = c(0.5, 4, 0.5, # Part 1
+                            0.5, 4, 0.5, # Part 2
+                            4))          # Part 3
+    
+    # plot_annotation(tag_levels = list(c("", "a", "b", "c", "d", 
+    #                                     "", "", "e", "f", "g", "h", 
+    #                                     "", "","i", "j", "k", "l", 
+    #                                     "", "", "m", "n", "o", "p", "")), 
+    #                                theme = theme(plot.tag = element_text(size = 30, face = "bold")))
+
+
+```
