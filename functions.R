@@ -713,4 +713,25 @@ get_legend <- function(plot, legend = NULL) {
 
 
 
+#### FUNCT: get_all_comparisons
+
+# this function reads in differenc comparisons from an excel document automatically.
+
+
+comparison_pairwise <- c("Fimbria.vs.Infundibulum", "Fimbria.vs.Ampulla", "Fimbria.vs.Isthmus", 
+                         "Infundibulum.vs.Ampulla", "Infundibulum.vs.Isthmus", "Ampulla.vs.Isthmus")
+
+pairwise_names <- c("fim_v_inf", "fim_v_amp", "fim_v_isth", "inf_v_amp", "inf_v_isth", "amp_v_isth")
+
+get_all_comparions <- function(path = pairwise_s_disc, comparison_list = comparison_pairwise, comparison_name = pairwise_names){
+  data_list <- lapply(comparison_list, read_xlsx, path = path)
+  names(data_list) <- comparison_name
+  
+  return(data_list)
+}
+
+
+
+
+
 

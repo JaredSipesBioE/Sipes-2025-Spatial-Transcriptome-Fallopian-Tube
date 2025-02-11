@@ -19,3 +19,927 @@ This document uses a GeoMx dataset that has already undergone Quality control an
 
 For details, see: geomx_dataset_and_normalization.Rmd
 
+
+# 0 Setup
+
+# 0.1 Load Packages
+ 
+The following packages are needed for this document. 
+
+
+```{r, message=FALSE, warning = FALSE}
+# 
+# if (!require("BiocManager", quietly = TRUE))
+#     install.packages("BiocManager")
+
+# The following initializes most up to date version of Bioc
+# BiocManager::install(version="3.15")
+# 
+# BiocManager::install("NanoStringNCTools")
+# BiocManager::install("GeomxTools")
+# BiocManager::install("GeoMxWorkflows")
+
+# Note:
+# Needed to install package lme4, numderiv
+library(NanoStringNCTools)
+library(GeomxTools)
+library(GeoMxWorkflows)
+
+if(packageVersion("GeomxTools") < "2.1" & 
+   packageVersion("GeoMxWorkflows") >= "1.0.1"){
+    stop("GeomxTools and Workflow versions do not match. Please use the same version. 
+    This workflow is meant to be used with most current version of packages. 
+    If you are using an older version of Bioconductor please reinstall GeoMxWorkflows and use vignette(GeoMxWorkflows) instead")
+}
+
+if(packageVersion("GeomxTools") > "2.1" & 
+   packageVersion("GeoMxWorkflows") <= "1.0.1"){
+    stop("GeomxTools and Workflow versions do not match. 
+         Please use the same version, see install instructions above.")
+    
+    # to remove current package version
+        # remove.packages("GeomxTools")
+        # remove.packages("GeoMxWorkflows")
+    # see install instructions above 
+}
+```
+
+```{r, message = FALSE, warning = FALSE}
+# for file names
+library(here)
+
+# read in xl files 
+library(readxl)
+
+
+# Need for UMAP, tSNE plots
+library(umap)
+library(Rtsne)
+
+# Needed for the heatmap plotting
+library(ComplexHeatmap)  #BiocManager::install("ComplexHeatmap")
+
+#Needed for volcano plotting functions
+
+library(ggrepel)
+library(ggplot2)
+library(latex2exp)
+library(plyr)
+library(dplyr)
+
+
+# Read in images and convert to ggplot object
+
+library(magick)
+
+
+# used for some color palettes  
+library(RColorBrewer)
+library(stringi)
+library(paletteer)
+library(wesanderson)
+
+
+# For significance
+library(ggpubr)
+
+
+# For Stitching multiple plots together
+library(patchwork)
+library(cowplot)
+library(grid)
+
+library(tidyr)
+
+library(readr) # needed for read_csv()
+
+
+
+```
+
+
+For space purposes, some functions are moved to an outside document "functions.R".
+
+
+```{r, echo=TRUE, include=FALSE}
+source("functions.R", local = knitr::knit_global())
+# or sys.source("your-script.R", envir = knitr::knit_global())
+```
+
+# 0.2 Load the Dataset and all Analyses Used
+
+```{r}
+
+# make sure to use correct "here" function.
+
+load(here::here("all_q_norm.Rdata"))
+
+load(here::here("disc_q_norm.Rdata"))
+
+load(here::here("valid_q_norm.Rdata"))
+
+
+dim(all_q_norm)
+
+dim(disc_q_norm)
+
+dim(valid_q_norm)
+
+```
+
+
+
+
+Refactor the GeoMx objects to use simplified region names. 
+
+```{r}
+
+factor_region <- function(GeoMxObj = all_q_norm){
+  pData(GeoMxObj)$region <- factor(pData(GeoMxObj)$region, levels = c("Fimbria", "Infundibulum", "Ampulla", "Isthmus"))
+  
+  pData(GeoMxObj)$region <- revalue(pData(GeoMxObj)$region, c("Fimbria"="Fim", "Infundibulum"="Inf", "Ampulla" = "Amp", "Isthmus" = "Isth"))
+  
+  return(GeoMxObj)
+}
+
+
+all_q_norm <- all_q_norm |> factor_region()
+
+disc_q_norm <- disc_q_norm |> factor_region()
+
+valid_q_norm <- valid_q_norm |> factor_region()
+
+```
+
+
+
+Subset the "all" dataset into discovery and validation datasets.
+
+The major difference between these datasets and the "disc_q_norm" and "valid_q_norm" is that the latter were normalizzed separately. In contrast, all_disc and all_valid were normalized together and comparisons of gene expression between the two datasets are valid. 
+
+```{r}
+all_disc <- all_q_norm[, pData(all_q_norm)$Patient %in% c("P1", "P2", "P3")]
+
+`%ni%` <- Negate(`%in%`)
+
+all_valid <- all_q_norm[, pData(all_q_norm)$Patient %ni% c("P1", "P2", "P3")]
+
+
+```
+
+
+# 0.3 Load Stat Analyses
+
+
+### Load files required for volcano plots
+
+
+```{r}
+
+
+stat_files <- paste0(getwd(), "/stat_files")
+
+stat_files_all <- paste0(stat_files, "/ALL")
+stat_files_disc <- paste0(stat_files, "/Discovery")
+stat_files_valid <- paste0(stat_files, "/Validation")
+
+#secretory cells
+pairwise_s_disc <- paste0(stat_files_disc, "/0.10_SECRETORY_Pairwise_region_comparison.xlsx")
+pairwise_s_valid <- paste0(stat_files_valid, "/Validation_SECRETORY_Pairwise_region_comparison.xlsx")
+pairwise_s_all <- paste0(stat_files_all, "/ALL_SECRETORY_Pairwise_region_comparison.xlsx")
+# ciliated cells 
+pairwise_c_disc <- paste0(stat_files_disc, "/0.10_CILIATED_Pairwise_region_comparison.xlsx")
+pairwise_c_valid <- paste0(stat_files_valid, "/Validation_CILIATED_Pairwise_region_comparison.xlsx")
+pairwise_c_all <- paste0(stat_files_all, "/ALL_CILIATED_Pairwise_region_comparison.xlsx")
+
+# create a nested list structure to store all of the dataframes in one object
+
+pairwise_comparisons <- list()
+
+```
+
+
+
+Create list of pairwise comparisons
+
+```{r}
+
+pairwise_comparisons[["disc"]][["sec"]] <- get_all_comparions(path = pairwise_s_disc)
+pairwise_comparisons[["valid"]][["sec"]] <- get_all_comparions(path = pairwise_s_valid)
+pairwise_comparisons[["all"]][["sec"]] <- get_all_comparions(path = pairwise_s_all)
+
+pairwise_comparisons[["disc"]][["cil"]] <- get_all_comparions(path = pairwise_c_disc)
+pairwise_comparisons[["valid"]][["cil"]] <- get_all_comparions(path = pairwise_c_valid)
+pairwise_comparisons[["all"]][["cil"]] <- get_all_comparions(path = pairwise_c_all)
+
+```
+
+
+## Loading One vs Other Comparisons
+
+In this comparison, one region is comared to the average of all other regions, for four total comparisons
+
+1. fimbria v others
+2. Inf v others
+3. amp v others
+4. isth v others
+
+
+Excel doc locations
+
+```{r}
+
+one_v_other_s_disc <- paste0(stat_files_disc, "/0.10_SECRETORY_One.VS.Others_region_comparison.xlsx")
+one_v_other_s_valid <- paste0(stat_files_valid, "/Validation_SECRETORY_One.VS.Others_region_comparison.xlsx")
+one_v_other_s_all <- paste0(stat_files_all, "/ALL_SECRETORY_One.VS.Others_region_comparison.xlsx")
+
+one_v_other_c_disc <- paste0(stat_files_disc, "/0.10_CILIATED_One.VS.Others_region_comparison.xlsx")
+one_v_other_c_valid <- paste0(stat_files_valid, "/Validation_CILIATED_One.VS.Others_region_comparison.xlsx")
+one_v_other_c_all <- paste0(stat_files_all, "/ALL_CILIATED_One.VS.Others_region_comparison.xlsx")
+
+
+```
+
+```{r}
+
+one_v_other <- list()
+
+
+comparison_one_v_other <- c("Fimbria.vs.Others", "Infundibulum.vs.Others", "Ampulla.vs.Others", "Isthmus.vs.Others")
+
+one_v_other_names <- c("fim_v_other", "inf_v_other", "amp_v_other", "isth_v_other")
+
+one_v_other[["disc"]][["sec"]] <- get_all_comparions(path = one_v_other_s_disc, comparison_list = comparison_one_v_other, comparison_name = one_v_other_names)
+one_v_other[["valid"]][["sec"]] <- get_all_comparions(path = one_v_other_s_valid, comparison_list = comparison_one_v_other, comparison_name = one_v_other_names)
+one_v_other[["all"]][["sec"]] <- get_all_comparions(path = one_v_other_s_all, comparison_list = comparison_one_v_other, comparison_name = one_v_other_names)
+
+
+one_v_other[["disc"]][["cil"]] <- get_all_comparions(path = one_v_other_c_disc, comparison_list = comparison_one_v_other, comparison_name = one_v_other_names)
+one_v_other[["valid"]][["cil"]] <- get_all_comparions(path = one_v_other_c_valid, comparison_list = comparison_one_v_other, comparison_name = one_v_other_names)
+one_v_other[["all"]][["cil"]] <- get_all_comparions(path = one_v_other_c_all, comparison_list = comparison_one_v_other, comparison_name = one_v_other_names)
+
+```
+
+
+# S1. Supplemental Figure 1 
+
+OVGP1 staining of the FT as a proxy for menstrual cycle status. 
+
+A is an image and B is a table and are not included.
+
+Supplemental Figure 1C is generated below.
+
+## OVGP1 Data
+
+```{r}
+
+
+OVGP1_percent <- read_xlsx(path = paste0(getwd(), "/IHC_analysis/OVGP1 Percentages.xlsx"))
+
+OVGP1 <- OVGP1_percent |> pivot_longer(cols = c("Fim", "Inf", "Amp", "Isth"), names_to = "region", values_to = "percent") |> 
+  mutate(percent = suppressWarnings(as.numeric(percent))) # some values are coerced to NA, but this is desired, so warning suppressed
+
+OVGP1$region <- OVGP1$region |> factor(levels = c("Fim", "Inf", "Amp", "Isth"))
+
+# remove slides not in GeoMx dataset 
+
+OVGP1_subset <- OVGP1[OVGP1$patient_ID %in% unique(pData(all_q_norm)$patient_ID),]
+
+# this is necessary to merge with the GeoMx Object. 
+
+OVGP1_subset <- transform(OVGP1_subset, patient_ID = as.double(patient_ID))
+
+```
+
+
+OVGP1 Results Boxplot
+
+
+```{r}
+
+ggplot(OVGP1_subset, aes(x = region, y = percent, fill = region)) + 
+  geom_boxplot()+
+  geom_point() + 
+  geom_line(aes(group = patient, color = patient), linetype = "dashed", linewidth = 1.2)+
+  theme_bw()+
+  scale_color_manual(values = c("#B01513FF", "#EA6312FF", "#F9A729FF", "#50C49FFF", "#54849AFF", "darkblue", "#B560D4FF"))+
+  scale_fill_manual(values= c("#7CAE00", "#00C1C6", "#F8766D", "#C77CFF"))+
+  theme(text=element_text(size=20))+
+  labs(y = "Percent cells OVGP1+", x = "Anatomical Region")
+
+```
+
+
+
+
+# S2. GO BP Analysis
+
+
+Supplemental Figure 2 - Biological Process Gene Ontology Analysis of differentially expressed genes for all region comparisons in the fallopian tube discovery dataset
+
+
+```{r}
+
+GO_file <- "/GO_analysis"
+
+# Discovery File Locations
+
+GO_disc_sec <- paste0(getwd(), GO_file, "/Discovery_GO", "/Pairwise/Sec/") 
+
+GO_disc_cil <- paste0(getwd(), GO_file, "/Discovery_GO", "/Pairwise/Cil/") 
+
+# Validation File Locations
+
+GO_valid_sec <- paste0(getwd(), GO_file, "/Validation_GO", "/Pairwise/Sec/") 
+
+GO_valid_cil <- paste0(getwd(), GO_file, "/Validation_GO", "/Pairwise/Cil/") 
+
+
+# Combined (all) File Locations
+
+GO_all_sec <- paste0(getwd(), GO_file, "/All_GO", "/Pairwise/Sec/") 
+
+GO_all_cil <- paste0(getwd(), GO_file, "/All_GO", "/Pairwise/Cil/") 
+
+
+
+```
+
+
+
+#### FUNCT: get_all_comparisons
+
+
+This function automatically reads in all pairwise comparisons (if they exist) and assigns them names. 
+Make sure to check that all names exactly match specifications, or they will not be read in. 
+
+```{r}
+
+
+comparison_pairwise_GO <- c("Fim v Inf", "Fim v Amp", "Fim v Isth", 
+                     "Inf v Amp", "Inf v Isth", "Amp v Isth")
+
+pairwise_names_GO <- c("fim_v_inf", "fim_v_amp", "fim_v_isth", "inf_v_amp", "inf_v_isth", "amp_v_isth")
+
+# append_names <- c()
+
+get_all_comparisons_GO <- function(path = GO_disc_cil, comparison_list = comparison_pairwise_GO, comparison_name = pairwise_names_GO, append = " GO BP Cil.csv"){
+  path <- paste0(path, comparison_list, append) # create full path names
+  
+  path_rm <- path[file.exists(path)] # check to see if files exist and remove if not
+  
+  names_rm <- comparison_name[file.exists(path)] # remove names for files removed
+  
+  data_list <- lapply(path_rm, read_csv) # read in the data files 
+  
+  names(data_list) <- names_rm # assign names 
+  
+  return(data_list)
+}
+
+
+```
+
+```{r}
+
+
+# create a nested list structure to store all of the dataframes in one object
+GO_pairwise <- list()
+
+GO_pairwise[["disc"]][["sec"]] <- get_all_comparisons_GO(path = GO_disc_sec, append = " GO BP Sec.csv")
+GO_pairwise[["valid"]][["sec"]] <- get_all_comparisons_GO(path = GO_valid_sec, append = " GO BP Sec.csv")
+GO_pairwise[["all"]][["sec"]] <- get_all_comparisons_GO(path = GO_all_sec , append = " GO BP Sec.csv")
+
+GO_pairwise[["disc"]][["cil"]] <- get_all_comparisons(path = GO_disc_cil_GO, append = " GO BP Cil.csv")
+GO_pairwise[["valid"]][["cil"]] <- get_all_comparisons(path = GO_valid_cil_GO, append = " GO BP Cil.csv")
+GO_pairwise[["all"]][["cil"]] <- get_all_comparisons(path = GO_all_cil_GO, append = " GO BP Cil.csv")
+
+```
+
+
+```{r}
+
+names(GO_pairwise$disc$sec)
+names(GO_pairwise$valid$sec)
+names(GO_pairwise$all$sec)
+
+names(GO_pairwise$disc$cil)
+names(GO_pairwise$valid$cil)
+names(GO_pairwise$all$cil)
+
+```
+
+
+## FUNCT: plot_GO()
+
+The following function is designed to plot all of the GO plots for the above data. 
+
+
+```{r}
+
+
+
+plot_GO <- function(data = GO_pairwise$disc$sec$fim_v_isth, n_graph = 12, min_genes = 3, title = ""){
+  
+    # if the title uses my shortened notation, expand to create a readable title
+  
+    if(title %in% c("fim_v_inf", "fim_v_amp", "fim_v_isth", "inf_v_amp", "inf_v_isth", "amp_v_isth")){
+      # define abbreviations and expansions
+        expansions <- c("_v_" = " versus ", 
+                     "fim" = "Fimbria", 
+                     "inf" = "Infundibulum", 
+                     "amp" = "Ampulla", 
+                     "isth" = "Isthmus")
+        
+        # replace all of the shortened names in the title 
+        for (word in names(expansions)) {
+        title <- gsub(word, expansions[[word]], title)
+      }
+    }
+  
+   # filter for gene count above the threshold set
+  
+  data <- data[data$nGenes > min_genes, ]
+  
+  # check to see if filtered for minimum gene counts returns any plottable pathways
+  if(nrow(data) == 0){
+    # no graphs can be generated, return NULL
+    return(NULL)
+  }
+  
+  # reduce to top n pathways
+  plot1_data <- head(data, n = n_graph) 
+  
+  # Remove preceding GO info
+  
+  plot1_data$Pathway <- gsub("^GO:[0-9]+ ", "", plot1_data$Pathway)
+  
+  
+  # Define a list of abbreviations
+  abbreviations <- c("response" = "resp", 
+                     "mediated by" = "med",
+                     "signaling pathway" = "signal. path.",
+                     "RNA polymerase II promoter" ="RNApolII prom",
+                     "transcription" = "transcr",
+                     "mediated" = "med.", 
+                     "cellular response" = "cell resp",
+                     "substance" = "subst",
+                     "process" = "proc",
+                     "chemical stimulus" = "chem stimul",
+                     "chemotaxis" = "chemotx", 
+                     "migration" = "migr", 
+                     "communication" = "comm",
+                     "subcellular" = "subcell",
+                     "cell surface" = "cell surf",
+                     "immune" = "imm", 
+                     "antimicrobial" = "antimicro",
+                     "differentiation" = "dif",
+                     "regeneration" = "regen",
+                     "proliferation" = "prolif",
+                     "programmed" = "program",
+                     "negative" = "neg",
+                     "positive" = "pos",
+                     "regulation" = "reg",
+                     "population" = "pop",
+                     "activation" = "activ",
+                     "developmental" = "dev",
+                     "development" = "dev",
+                     "anatomical" = "anat",
+                     "oxygen" = "O2")
+
+    # Function to replace words with abbreviations
+  simplify_names <- function(name) {
+      for (word in names(abbreviations)) {
+        name <- gsub(word, abbreviations[[word]], name)
+      }
+      return(name)
+    }
+
+  # Apply the function to the Pathway column
+  plot1_data$Pathway <- sapply(plot1_data$Pathway, simplify_names)
+    
+
+
+  # sort by Fold.Enrichment
+  plot_df <- plot1_data %>%
+    # use manhattan distance to calculate best pathways
+    # -log10 to ensure lowest FDR is first in df
+  arrange(abs(`Fold Enrichment`) + abs(-log10(`Enrichment FDR`))) |> mutate(Pathway = factor(Pathway, levels = Pathway))
+  
+ 
+  
+  
+  # generate a palette of colors for the graph
+  pal <- wes_palette("Zissou1", 100, type = "continuous")
+
+
+
+    # generate the GO plot
+    
+    test<-   ggplot(data = plot_df,  aes(x=`Fold Enrichment`, y= Pathway)) +
+        geom_segment(aes(x= 0, xend=`Fold Enrichment`), linewidth = 1) +
+        geom_point(aes(size= nGenes, color= `Enrichment FDR`)) +
+        theme_bw() +
+        scale_color_gradientn(colors = rev(pal))+ # reverses the order of the palette
+        scale_y_discrete(labels = function(x) str_wrap(x, width = 25))+
+      labs(x = "Fold Enrichment", y = "", title = title)
+    
+    # change the text size of the plot
+    plot <- test + theme(
+      axis.title=element_text(size=24),
+      axis.text=element_text(size=18),
+      plot.title=element_text(size=18),
+      legend.text =element_text(size=18),
+      legend.title = element_text(size = 18),
+      axis.text.y = element_text(vjust = 0.5))
+    
+    return(plot)
+}
+```
+
+
+
+```{r}
+
+GO_plots <- list()
+
+pairwise_names <- c("fim_v_inf", "fim_v_amp", "fim_v_isth", "inf_v_isth", "amp_v_isth")
+
+make_GO_plots <- function(dfs = GO_plots$disc$sec){
+  
+  # get the names of all data frames in the set
+
+  GO_names <- names(dfs)
+  
+  # for each name, generate a GO plot
+  output_graphs <- lapply(GO_names, 
+                            function(x){
+                              plot_GO(data = dfs[[x]], title = x)
+                              })
+  # assign names to output
+  names(output_graphs) <- GO_names
+  
+  return(output_graphs)
+}
+
+
+
+GO_plots$disc$sec <- make_GO_plots(dfs = GO_pairwise$disc$sec)
+
+GO_plots$disc$cil <- make_GO_plots(dfs = GO_pairwise$disc$cil)
+
+GO_plots$valid$sec <- make_GO_plots(dfs = GO_pairwise$valid$sec)
+
+GO_plots$valid$cil <- make_GO_plots(dfs = GO_pairwise$valid$cil)
+
+GO_plots$all$sec <- make_GO_plots(dfs = GO_pairwise$all$sec)
+
+GO_plots$all$cil <- make_GO_plots(dfs = GO_pairwise$all$cil)
+
+
+
+
+```
+
+
+```{r fig.height=30, fig.width=24}
+
+
+
+top_1 <-   grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Discovery Dataset: GO Plots for Secretory Cells', gp=gpar(fontsize=25)))
+
+GO_plot_disc_sec <- GO_plots$disc$sec$fim_v_inf + GO_plots$disc$sec$fim_v_amp + GO_plots$disc$sec$fim_v_isth + 
+  grid::textGrob('No pathways enriched \n Infundibulum v Ampulla', gp=gpar(fontsize=25)) + GO_plots$disc$sec$inf_v_isth + GO_plots$disc$sec$amp_v_isth +
+  plot_annotation(tag_levels = list("a")) & theme(plot.tag  = element_text(size = 25)) 
+
+top_2 <-   grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Discovery Dataset: GO Plots for Ciliated Cells', gp=gpar(fontsize=25)))
+
+GO_plot_disc_cil <- 
+GO_plots$disc$cil$fim_v_inf + GO_plots$disc$cil$fim_v_amp + GO_plots$disc$cil$fim_v_isth + 
+  grid::textGrob('No pathways enriched \n Infundibulum v Ampulla', gp=gpar(fontsize=25)) + GO_plots$disc$cil$inf_v_isth + GO_plots$disc$cil$amp_v_isth +
+  plot_annotation(tag_levels = list("g", "h", "i", "j", "k", "l")) & theme(plot.tag  = element_text(size = 25)) 
+
+
+wrap_elements(top_1) / (GO_plot_disc_sec) / wrap_elements(top_2) / GO_plot_disc_cil + 
+  plot_layout(heights = c(0.2, 4, 0.2, 4))
+
+
+wrap_elements(top_1) / (GO_plots$disc$sec$fim_v_inf + GO_plots$disc$sec$fim_v_amp + GO_plots$disc$sec$fim_v_isth + 
+  grid::textGrob('No pathways enriched \n Infundibulum v Ampulla', gp=gpar(fontsize=25)) + GO_plots$disc$sec$inf_v_isth + GO_plots$disc$sec$amp_v_isth) / wrap_elements(top_2) / (GO_plots$disc$cil$fim_v_inf + GO_plots$disc$cil$fim_v_amp + GO_plots$disc$cil$fim_v_isth + 
+  grid::textGrob('No pathways enriched \n Infundibulum v Ampulla', gp=gpar(fontsize=25)) + GO_plots$disc$cil$inf_v_isth + GO_plots$disc$cil$amp_v_isth)  + 
+  plot_layout(heights = c(0.2, 4, 0.2, 4)) +
+  plot_annotation(tag_levels = list(c("", "a", "b", "c", "d", "e", "f", "", "g", "h", "i", "j", "k", "l"))) & theme(plot.tag  = element_text(size = 25)) 
+
+
+```
+
+
+
+# S3. Pairwise Comparison volcano plots (Discovery Dataset)
+
+
+Supplementary Figure 3 – Pairwise Comparisons of all Regions (Discovery Dataset).
+
+
+
+#S4.Pairwise Comparisons volcano plots (Validation Dataset).
+
+
+Supplementary Figure 4  – Pairwise Comparisons of all Regions (Validation Dataset).
+
+
+#S5. Regional comparison volcano plots (validation dataset)
+
+
+Supplemental Figure 5 - Regional comparison volcano plots showing transcripts upregulated and downregulated in secretory and ciliated ROIs in the validation dataset
+
+
+# S6. 
+
+
+Supplemental Figure 6 – Markers of Mature Ciliated Cells are upregulated in the distal fallopian tube
+
+
+# S7. Other MHC II Transcripts
+
+
+
+# S8. Analysis of other FT transcriptome data
+
+Analysis of publically avaiable FT transcriptome datasets.
+
+analysis performed seperately. See Sowamber analysis and Ulrich analysis notebooks for details. 
+
+
+# S9. Markers of peg cells
+
+
+
+## S9.1 Create list of Peg cell markers from Ulrich paper
+
+Markers of Non-ciliated epithelial (NCE) cells are available publically from Ulrich 2022. 
+(DOI: 10.1016/j.devcel.2022.02.017)
+
+The paper identifies probable peg cell cluster (OVGP1 producing secretory cells) as 2-5. 
+
+```{r}
+
+## Function to retrieve Gene IDs
+
+pull_gene <- function(df = NULL, cluster_name = NULL){
+  out <- df |> filter(cluster == cluster_name) |> pull(gene)
+  
+  return(out)
+}
+
+# Retrieve PEG cell markers identified in this excel document
+
+source_file_NCE <- paste0(getwd(), "/cell_markers/Ulrich_NCE_Markers.xlsx")
+
+
+# read in excel document
+NCSE_markers <- read_xlsx(source_file_NCE, skip = 4, range = cell_cols("B:H"))
+
+# Filter out top markers (best cell type distinguishing capacity)
+
+SE5_top <- NCSE_markers |> filter(cluster == "2-5")  |> filter((pct.1 - pct.2) > 0.5)  # PEG Cell Markers
+
+
+# get list of genes in top markers
+peg_markers <- SE5_top$gene
+
+
+# Alternative, for looking at all markers significantly higher in peg cells
+# SE5_markers <- NCSE_markers |> pull_gene(cluster_name = "2-5") # ALL PEG Markers
+
+```
+
+
+
+
+## S9.2 t_test
+
+Subset the dataset to look only at secretory cells, then perform t-test comparing regions of interest. 
+
+### FUNC:  t.test_logfold()
+
+summary: perform t-test comparing all genes between two different selected regions. 
+
+```{r}
+
+t.test_logfold <- function(obj, variable_type = "region", upreg_group = "Fimbria", downreg_group = "Isthmus", elt_name = "q_norm"){
+  
+  # Get locations of all in the "up" group for that variable
+  g_up <- which(pData(obj)[variable_type] == upreg_group)
+  # get locations of all in the "down" group for that variable
+  g_down <- which(pData(obj)[variable_type] == downreg_group)
+  
+  # Retrieve normalized expression data from the GeoMxDataSet Object
+  obj <-  assayDataElement(object = obj, elt = elt_name)
+  
+  # For each gene (every row), perform a T-test comparing the columns in the 
+  #up_group vs down_group
+  
+  t.test <- apply(obj, 1, 
+              function(x) t.test(
+                x[g_up],
+                x[g_down]))
+  
+  #calculate the log_2 Fold Change of up_group compared to down for each row
+  
+  log_fold <- apply(obj, 1,
+                    function(x)  log2(mean(x[g_up])/mean(x[g_down]))
+                    )
+  
+  # convert to data frame
+  log_fold <- as.data.frame(log_fold)
+  
+  # retrieve the p.values from the t.test object and store to a datafram
+
+  df <- do.call(rbind, lapply(t.test, function(x) c(
+    p_value = unname(x$p.value))))
+  
+  # create an adjusted p_value using the Bonferooni correction 
+
+  df <- transform(df, padj = p.adjust(p_value, method = "BH"))
+  
+  # merge the log_fold values with the p_values
+  
+  output <- merge(df, log_fold, by = 0)
+  
+  
+  # rename the column rownames to Marker.name
+  
+  output <- output |> dplyr::rename(Marker.name = Row.names)
+  #  Add the -log10 of the pvalue for plotting 
+  output <- output |> mutate(minuslog10_Pvalue = -log10(p_value))
+  
+  return(output)
+  
+}
+
+# t.test_logfold_region(obj = all_q_norm, group_up = "Isth", group_down = "Fim")
+```
+
+### Perform t-test
+
+
+``` {r}
+
+
+# subset the discovery datset to look only at expression in Secretory Cells 
+disc_q_norm_sec <- disc_q_norm[, pData(disc_q_norm)$segment %in% c("Secretory")]
+
+# perform t_tests for all regions
+
+disc_isth.v.fim <- t.test_logfold(obj = disc_q_norm_sec, upreg_group = "Isth", downreg_group = "Fim")
+
+disc_inf.v.fim <- t.test_logfold(obj = disc_q_norm_sec, upreg_group = "Inf", downreg_group = "Fim")
+
+disc_inf.v.amp <- t.test_logfold(obj = disc_q_norm_sec, upreg_group = "Amp", downreg_group = "Inf")
+
+disc_amp.v.isth <- t.test_logfold(obj = disc_q_norm_sec, upreg_group = "Isth", downreg_group = "Amp")
+
+
+```
+
+
+
+### S9 Volcano plots
+
+```{r fig.height=6, fig.width=25}
+
+# A <- volcano_plot(df = disc_isth.v.fim, title_name = "Fimbria vs Isthmus Comparison (Discovery)", highlight_genes = peg_markers, upreg = "Isthmus", downreg = "Fimbria", FC_cutoff =0.5) |> add_labels(df = disc_isth.v.fim, highlight_genes = peg_markers, n_genes = 0)
+
+s9_fim_v_inf <- volcano_plot(df = disc_inf.v.fim, title_name = "Fimbria vs Infundibulum Comparison (Discovery)", highlight_genes = peg_markers, upreg = "Infundibulum", downreg = "Fimbria", FC_cutoff =0.5) |> add_labels(df = disc_inf.v.fim, highlight_genes = peg_markers, n_genes = 0) |> remove_legend() + theme(plot.title = element_text(size=16))
+
+s9_inf_v_amp <- volcano_plot(df = disc_inf.v.amp, title_name = "Infundibulum vs Ampulla Comparison (Discovery)", highlight_genes = peg_markers, upreg = "Ampulla", downreg = "Infundibulum", FC_cutoff =0.5)|> add_labels(df = disc_inf.v.amp, highlight_genes = peg_markers, n_genes = 0) |> remove_legend() + theme(plot.title = element_text(size=16))
+
+
+s9_amp_v_isth <- volcano_plot(df = disc_amp.v.isth, title_name = "Ampulla vs Isthmus Comparison (Discovery)", highlight_genes = peg_markers, upreg = "Isthmus", downreg = "Ampulla", FC_cutoff =0.5) |> add_labels(df = disc_amp.v.isth, highlight_genes = peg_markers, n_genes = 0) |> remove_legend()  + theme(plot.title = element_text(size=16))
+
+# 
+# valid_q_norm_sec <- valid_q_norm[, pData(valid_q_norm)$segment %in% c("Secretory")]
+# 
+# 
+# valid_isth.v.fim <- t.test_logfold(obj = valid_q_norm_sec, upreg_group = "Isth", downreg_group = "Fim")
+# 
+# valid_inf.v.fim <- t.test_logfold(obj = valid_q_norm_sec, upreg_group = "Inf", downreg_group = "Fim")
+# 
+# valid_inf.v.amp <- t.test_logfold(obj = valid_q_norm_sec, upreg_group = "Amp", downreg_group = "Inf")
+# 
+# valid_amp.v.isth <- t.test_logfold(obj = valid_q_norm_sec, upreg_group = "Isth", downreg_group = "Amp")
+# 
+# 
+# Q <- volcano_plot(df = valid_isth.v.fim, title_name = "Fimbria vs Isthmus Comparison (Validation)", highlight_genes = peg_markers, upreg = "Isthmus", downreg = "Fimbria", FC_cutoff =0.5)
+# 
+# R <- volcano_plot(df = valid_inf.v.fim, title_name = "Fimbria vs Infundibulum Comparison (Validation)", highlight_genes = peg_markers, upreg = "Infundibulum", downreg = "Fimbria", FC_cutoff =0.5)
+# 
+# S <- volcano_plot(df = valid_inf.v.amp, title_name = "Infundibulum vs Ampulla Comparison (Validation)", highlight_genes = peg_markers, upreg = "Ampulla", downreg = "Infundibulum", FC_cutoff =0.5)
+# 
+# 
+# V <- volcano_plot(df = valid_amp.v.isth, title_name = "Isthmus vs Ampulla Comparison (Validation)", highlight_genes = peg_markers, upreg = "Isthmus", downreg = "Ampulla", FC_cutoff =0.5)
+
+
+# (s9_fim_v_inf + s9_inf_v_amp + s9_amp_v_isth)
+
+
+
+
+```
+
+
+
+## S9.3 boxplots
+
+```{r fig.height=25, fig.width=25}
+
+
+peg_markers_s9 <- c("LGR5", "NOTCH2", "COL1A2", "SERINC5")
+
+# create settings for boxplots
+
+
+
+make_figs9_boxplots <- function(genes = Fig5_genes, dataset = all_q_norm, title = "All"){
+
+  graphs <- lapply(X = genes, FUN = Cil_v_Sec_Anat_Boxplot_Points, dataset = dataset)
+  
+  # resize
+  graph_resize <- lapply(graphs, adj_text_size, pnt = 17)
+  graph_remove_legend <- lapply(graph_resize, remove_legend)
+  graph_sig <- lapply(graph_remove_legend, add_sig, pnt = 4)
+
+  return(graph_sig)
+  
+  }
+
+
+
+# Create all of the Boxplots for the Discovery Dataset
+
+fs9_disc <- make_fig5_boxplots(genes = peg_markers_s9 , dataset = disc_q_norm)
+names(fs9_disc) <- peg_markers_s9
+
+# Create all of the Boxplots for the Validation Dataset
+
+fs9_valid <- make_fig5_boxplots(genes = peg_markers_s9 , dataset = valid_q_norm)
+names(fs9_valid) <- peg_markers_s9
+
+
+```
+
+
+
+## S9.4 Final Plot
+
+
+```{r fig.height=25, fig.width=25}
+
+
+# Create Grobs for use as labels
+
+top <-   grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Discovery Dataset: OVGP1+ (peg cell) transcripts', gp=gpar(fontsize=25)))
+
+bottom <- grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Validation Dataset: OVGP1+ (peg cell) transcripts', gp=gpar(fontsize=25)))
+
+
+# create legends
+
+legend_disc <- make_boxplot_legend(dataset = disc_q_norm)
+
+legend_valid <- make_boxplot_legend(dataset = valid_q_norm)
+
+
+  # Part 1 - volcano plots
+  (s9_fim_v_inf | s9_inf_v_amp | s9_amp_v_isth) /
+
+  # Part 2 - disc PEG Transcripts
+  wrap_elements(top) / 
+  (fs9_disc$`LGR5` | fs9_disc$`NOTCH2` |  fs9_disc$`COL1A2` | fs9_disc$`SERINC5`) /
+  legend_disc /
+   
+  # Part 3 - valid PEG Transcripts  
+  wrap_elements(bottom) / 
+  (fs9_valid$`LGR5` | fs9_valid$`NOTCH2` |  fs9_valid$`COL1A2` | fs9_valid$`SERINC5`) /
+  legend_valid + plot_layout(heights =
+                            c(3,          # Part 1
+                            0.5, 4, 0.5, # Part 2
+                            0.5, 4, 0.5  # Part 3
+                            ))
+```
+
+
+
+
+# S10. Hormone receptors and associated transc factors
+
+Supplemental Figure 9 – Hormone Receptors and associated Pioneer Transcription Factors show fluctuating expression across fallopian tube  driven by the menstrual cycle
+
+
+
+
+
+
+
+
