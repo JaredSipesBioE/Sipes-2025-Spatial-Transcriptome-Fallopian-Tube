@@ -31,7 +31,7 @@ For details, see: geomx_dataset_and_normalization.Rmd
 The following packages are needed for this document. 
 
 
-```{r}
+```{r, message=FALSE, warning = FALSE}
 # 
 # if (!require("BiocManager", quietly = TRUE))
 #     install.packages("BiocManager")
@@ -68,7 +68,7 @@ if(packageVersion("GeomxTools") > "2.1" &
 }
 ```
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
 # for file names
 library(here)
 
@@ -119,7 +119,7 @@ library(tidyr)
 For space purposes, some functions are moved to an outside document "functions.R".
 
 
-```{r, include=FALSE}
+```{r, echo=TRUE, include=FALSE}
 source("functions.R", local = knitr::knit_global())
 # or sys.source("your-script.R", envir = knitr::knit_global())
 ```
@@ -1152,5 +1152,21 @@ OVGP1_plots <- remove_legend(OVGP1_corr$`HLA-DRA`) | remove_legend(OVGP1_corr$`H
     #                                     "", "", "m", "n", "o", "p", "")), 
     #                                theme = theme(plot.tag = element_text(size = 30, face = "bold")))
 
+
+```
+
+
+
+# F6. Figure 6
+
+Figure six is a picture generated in biorender and is not included in this document. 
+
+
+
+# Session Info
+
+```{r}
+
+sessionInfo()
 
 ```

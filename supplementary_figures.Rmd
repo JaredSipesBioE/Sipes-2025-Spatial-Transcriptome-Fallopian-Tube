@@ -1,0 +1,21 @@
+---
+title: "supplementary_figures"
+author: "Jared Sipes"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Summary
+
+The following document includes the code required to generate supplementary figures for the paper:
+
+"Spatial Transcriptomic Profiling of the Human Fallopian Tube Epithelium Reveals Region-specific Gene Expression Patterns"
+
+This document uses a GeoMx dataset that has already undergone Quality control and normalization. 
+
+For details, see: geomx_dataset_and_normalization.Rmd
+

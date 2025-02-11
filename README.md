@@ -15,7 +15,7 @@ A brief summary of the contents of this project:
 Files:
 * **data_analysis.Rmd** - contains preliminary QC, Filtering, and Normalization of the GeoMx Dataset
 * **main_figures.Rmd** - contains the code used to generate the main figures for this paper
-* **supplemental_figures.Rmd** - contains the code used to generate the supplemental figures for this paper
+* **supplementary_figures.Rmd** - contains the code used to generate the supplemental figures for this paper
 * **functions.R** - contains helper functions for generating graphs that were taking up too much space in the main markdown documents. 
 
 Folders:
