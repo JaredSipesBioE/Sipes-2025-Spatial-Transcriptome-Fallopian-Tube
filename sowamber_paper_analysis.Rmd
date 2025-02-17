@@ -1,0 +1,357 @@
+---
+title: "Sowamber Paper Analysis"
+author: "Jared Sipes"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Summary
+
+This document was used to generated figures S8A and S8B for the paper:
+
+"Spatial Transcriptomic Profiling of the Human Fallopian Tube Epithelium Reveals Region-specific Gene Expression Patterns"
+
+
+This R document explores the dataset collected in the paper: "Integrative Transcriptome Analyses of the Human Fallopian Tube: Fimbria and Ampulla-Site of Origin of Serous Carcinoma of the Ovary" (Sowamber 2020)
+
+https://pubmed.ncbi.nlm.nih.gov/32349388/
+
+PMID: 32349388 PMCID: PMC7281286 DOI: 10.3390/cancers12051090
+
+
+The dataset was collected via laser capture microdissection of human fallopian tube epithelium and can be accessed on the Gene Expression Omnibus using the following accession number: GSE129348
+
+
+https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE129348
+
+
+
+#1. Load Required Packages
+
+
+```{r}
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("GEOquery")
+BiocManager::install("maptools")
+BiocManager::install("biomaRt")
+
+```
+
+# 2. Download dataset
+
+```{r}
+
+
+library(GEOquery)
+
+library(biomaRt)
+
+
+
+# load series and platform data from GEO
+
+gset <- getGEO("GSE129348", GSEMatrix =TRUE, AnnotGPL=FALSE)
+if (length(gset) > 1) idx <- grep("GPL17586", attr(gset, "names")) else idx <- 1
+gset <- gset[[idx]]
+
+# Look at object
+
+dim(exprs(gset))
+
+# look at rownames
+
+rownames(exprs(gset))[1000:1050]
+
+
+# some rownames have an erroneous .1 added to the end.
+
+#create a new ExpressionSet object
+
+gset_new <- gset
+
+
+#  fix row names
+rownames(gset_new) <- gsub(x = rownames(gset_new), pattern = "\\.1$", "")
+
+fData(gset_new)$ID <- gsub(x = fData(gset_new)$ID, pattern = "\\.1$", "")
+
+
+```
+
+
+
+
+
+According to the downloading gset object.
+
+"GSM3711428 Expression arrays were preprocessed using the frma package (McCall et al., 2010) from  Bioconductor for hgu133plus2 arrays, and the oligo Bioconductor package (Carvalho and  Irizarry, 2010) for human genome HTA-2.0 arrays"
+
+"GSM3711428 Heat maps for data visualization were created using the  heatmap.2 function from the ggplot2 R package. Affymatrix Transcriptome Analysis software was used to analyze datasets. The data was normalized to oligo RMA gene level."
+
+
+
+It looks like the chip used was the "Affymetrix Human Transcriptome Array 2.0", so I need to figure out how to convert the probe IDs used by this platform to some format that is human readable. 
+
+```{r}
+ensembl <- useEnsembl(biomart = "genes", dataset = "hsapiens_gene_ensembl")
+mart <- useDataset("hsapiens_gene_ensembl", useMart("ensembl"))
+listAttributes(mart)[grep("affy", listAttributes(mart)[,1]),]
+
+G_list <- getBM(filters= "with_affy_hta_2_0", attributes= c("affy_hta_2_0", "ensembl_gene_id",
+                                                          "hgnc_symbol"),values=TRUE,mart= mart)
+
+head(G_list)
+```
+
+
+
+# 3. Converting Transcript names to Gene Symbol
+
+
+If the dataset is from an Affymetrix array, so we need to create a lookup table to map the ID to 
+
+
+For some reason there is a ".1" appended to the end of all probe names for affy_hta_2_0. This problem has been reported before: https://support.bioconductor.org/p/p133036/ . 
+
+I have removed them in order to get the correct lookup table. 
+
+
+
+
+```{r}
+# create a lookup table
+
+## remove ".1" from IDs
+# for some reason this is added to the end and it messes up analysis 
+affy_id <- gsub(x = fData(gset)$ID, pattern = "\\.1$", "")
+
+
+# Count names ending with _st
+count_st <- sum(grepl("_st$", affy_id))
+
+# Count names ending with _at
+count_at <- sum(grepl("_at$", affy_id))
+
+# Count names ending with .hg
+count_hg <- sum(grepl("\\.hg$", affy_id))
+
+
+# identfiy the non-matching genes
+
+non_matching <- affy_id[!grepl("(_st|_at|\\.hg)$", affy_id)]
+
+
+
+require("biomaRt")
+mart <- useMart("ENSEMBL_MART_ENSEMBL")
+mart <- useDataset("hsapiens_gene_ensembl", mart)
+annotLookup <- getBM(
+  mart=mart,
+  attributes=c(
+    "affy_hta_2_0",
+    "ensembl_gene_id",
+    "gene_biotype",
+    "external_gene_name"),
+  filter = "affy_hta_2_0",
+  values = affy_id)
+
+
+head(annotLookup, 100)
+
+```
+
+
+
+
+```{r}
+
+
+# using the lookup table, create a new column in fData with gene names
+
+
+fData(gset_new)$gene_name <- annotLookup$external_gene_name[match(fData(gset_new)$ID, annotLookup$affy_hta_2_0)]
+
+
+
+```
+
+
+```{r}
+
+
+genes_needed <- c("OVGP1", "HLA-DRA", "HLA-DRB1", "HLA-DPA1", "HLA-DPB1", "HLA-DRB3", "HLA-DRB4", "HLA-DQA1", "HLA-DQB1", "HLA-DMA", "HLA-DMB", "HLA-DOA", "CD74", "ESR1", "PGR")
+
+get_affy_ID <- function(gene_list = genes_needed){
+  gene_table <- annotLookup[annotLookup$external_gene_name %in% gene_list, ]
+
+  return(gene_table)
+
+}
+
+get_affy_ID()
+
+```
+
+
+
+```{r}
+
+ID_pairs <- get_affy_ID(gene_list = c("HLA-DRA", "HLA-DRB1", "HLA-DPA1", "HLA-DPB1", "HLA-DRB3", "HLA-DRB4", "HLA-DQA1", "HLA-DQB1", "HLA-DMA", "HLA-DMB", "HLA-DOA", "CD74", "HLA-DRB2"))
+
+ID_pairs <- ID_pairs |>
+  distinct(external_gene_name, .keep_all = TRUE)
+
+```
+
+
+#3. Perform t_test comparing menstrual cycle values.
+
+```{r}
+
+
+# Ensure the "menstrual" column in pData(gset) is a factor
+pData(gset_new)$`menstrual` <- factor(pData(gset)$`menstrual phase:ch1`)
+
+table(pData(gset)$menstrual)
+
+
+# Get expression data (genes as rows, samples as columns)
+
+
+t_test_results <- apply(exprs(gset_new), 1, function(gene_expr) {
+    t.test(gene_expr ~ pData(gset)$menstrual)
+}
+)
+
+
+```
+
+
+
+
+
+
+```{r}
+
+# Extract statistics from t-test results
+t_stats <- sapply(t_test_results, function(res) res$statistic)
+p_values <- sapply(t_test_results, function(res) res$p.value)
+
+
+# Compute log2 fold change (optional, depending on how you want to represent the effect size)
+# For simplicity, assuming "menstrual" has two levels (A and B)
+
+group_means <- list()
+
+
+group_means$follicular <- apply(exprs(gset_new)[, pData(gset)$menstrual == "FOLLICULAR"], 1, mean, na.rm = TRUE)  # For Follicular
+
+group_means$luteal <- apply(exprs(gset_new)[, pData(gset)$menstrual == "LUTEAL"], 1, mean, na.rm = TRUE)  # For Luteal
+
+
+log2fc <- log2(group_means$luteal / group_means$follicular)
+
+# Create a data frame with results
+volcano_data <- data.frame(
+    gene = rownames(exprs(gset_new)),
+    t_stat = t_stats,
+    p_value = p_values,
+    log2fc = log2fc
+)
+
+
+```
+
+
+
+
+```{r}
+
+
+# Optional: Label top significant genes (adjust thresholds as necessary)
+top_genes <- volcano_data[volcano_data$p_value < 0.05 & abs(volcano_data$log2fc) > 0.4,]
+
+ggplot(volcano_data, aes(x = log2fc, y = -log10(p_value))) +
+    geom_point(aes(color = p_value < 0.05), alpha = 0.6, size = 1.5) +
+    scale_color_manual(values = c("gray", "red")) +
+    theme_minimal() +
+    labs(title = "Volcano Plot of Gene Expression Differences",
+         x = "Log2 Fold Change",
+         y = "-Log10 P-value") +
+    theme(legend.position = "none")
+```
+
+# Figure S8A
+
+```{r}
+
+
+volcano_plot
+```
+
+# Figure S8B
+
+
+
+Now create a scatterplot that shows the correlation between detected OVGP1 expression and HLA-DRA expression. 
+
+
+```{r fig.height=10, fig.width=15, warning = FALSE}
+
+library(patchwork)
+
+
+OVGP1_corr <- function(gene_ID = "TC06000399.hg", gene_name = "HLA-DRA"){
+
+OVGP1_expression <- exprs(gset_new)["TC01000128.hg", ]
+gene_expression <- exprs(gset_new)[gene_ID, ]
+
+data <- data.frame(
+  OVGP1 = OVGP1_expression,
+  gene = gene_expression
+)
+
+
+
+ggplot(data, aes(x = OVGP1, y = gene)) +
+  geom_point() +
+  labs(x = "OVGP1 Expression", y = paste0(gene_name, " Expression")) +
+  ggtitle(paste0("OVGP1 vs ", gene_name, " Expression")) +
+  theme_minimal() +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +  # Add linear regression line
+  stat_cor(method = "pearson", label.y.npc = 0.9, label.x.npc = 0.5)  # Adjust label.x and label.y to place the correlation label
+
+}
+ 
+
+
+plot_list <- apply(ID_pairs, 1, function(row) {
+  OVGP1_corr(row['affy_hta_2_0'], row['external_gene_name'])
+}) 
+
+names(plot_list) <- ID_pairs$external_gene_name
+
+
+
+plot_list$CD74 + plot_list$`HLA-DRA` + plot_list$`HLA-DRB1` +  plot_list$`HLA-DRB2`  + plot_list$`HLA-DRB3` + 
+  plot_list$`HLA-DRB4` + plot_list$`HLA-DMA` + plot_list$`HLA-DMB`  + plot_list$`HLA-DQA1` + plot_list$`HLA-DQB1` +
+  plot_list$`HLA-DPA1` + plot_list$`HLA-DOA`
+
+
+```
+
+# Session Info
+
+```{r}
+
+sessionInfo()
+
+```
+

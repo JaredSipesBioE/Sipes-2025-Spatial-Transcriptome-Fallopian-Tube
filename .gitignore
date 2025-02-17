@@ -47,3 +47,10 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+
+# IGNORE RDS and H5AD
+
+*.rds
+*.RDS
+*.H5AD

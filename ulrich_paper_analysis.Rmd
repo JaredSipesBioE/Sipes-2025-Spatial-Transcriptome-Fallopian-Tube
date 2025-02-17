@@ -1,0 +1,427 @@
+---
+title: "ulrich_paper_analysis"
+author: "Jared Sipes"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Summary
+
+
+This explores the Ulrich paper single cell sequencing dataset and generates figure S8D. 
+
+We will be downloading the data from cellxgene using their api. Link may be found here:
+
+https://cellxgene.cziscience.com/collections/fc77d2ae-247d-44d7-aa24-3f4859254c2c 
+
+We are following the api example here: 
+
+https://github.com/chanzuckerberg/single-cell-curation/blob/main/notebooks/curation_api/R/get_dataset_R.ipynb
+
+
+# Load Packages
+
+
+```{r}
+# Single cell sequencing dependencies
+library(Seurat)
+
+# required for downloading data
+library(readr)
+library(httr)
+library(stringr)
+library(rjson)
+
+# for graphing 
+library(patchwork)
+library(ggplot2)
+library(tidyverse)
+
+```
+
+```{r}
+getwd()
+```
+
+```{r}
+
+# FT_data <- readRDS(paste0(getwd(), "/ulrich_files", "/Ulrich 4 healthy FT.RDS"))
+# FT_data_non_cil <- readRDS(paste0(getwd(),"/ulrich_files",  "/Ulrich Epithelial NonCiliated.RDS"))
+# FT_data_cil <- readRDS(paste0(getwd(), "/ulrich_files", "/Ulrich Epithelial Ciliated.RDS"))
+# FT_data_stroma <- readRDS(paste0(getwd(), "/ulrich_files", "/Ulrich Stromal.RDS"))
+
+
+```
+
+
+
+```{r}
+# enter collection ID
+
+collection_id <- "fc77d2ae-247d-44d7-aa24-3f4859254c2c"
+
+# https://cellxgene.cziscience.com/collections/fc77d2ae-247d-44d7-aa24-3f4859254c2c
+
+
+dataset_id_non_cil <- "cac02b79-9f54-4668-9235-60d3b76a4197" # non_cil epithelium 
+
+dataset_id_cil <- "acf818eb-f6d2-42b9-bb1d-475aa9cff2bb" # cil-epithelium
+
+
+#Specify domain (and API url)
+
+
+domain_name <- "cellxgene.cziscience.com"
+site_url <- str_interp("https://${domain_name}")
+api_url_base <- str_interp("https://api.${domain_name}")
+
+
+
+# Formulate request and fetch a Datasets metadata
+
+dataset_path_non_cil <- str_interp("/curation/v1/collections/${collection_id}/datasets/${dataset_id_non_cil}") 
+url <- str_interp("${api_url_base}${dataset_path_non_cil}")
+
+res <- GET(url=url, add_headers(`Content-Type`="application/json"))
+stop_for_status(res)
+res_content <- content(res)
+print(res_content)
+
+
+# Download Dataset Assets
+
+assets <- content(res)$assets
+dataset_id <- content(res)$dataset_id
+dataset_name <- "ulrich_epithelial_non_cil"
+save_folder <- paste0(getwd(), "/ulrich_files")
+for (asset in assets) {
+    download_filename <- str_interp("${dataset_name}.${asset$filetype}")
+    full_path <- file.path(save_folder, download_filename) #construct full path
+    
+    
+    print(str_interp("Downloading ${download_filename}... "))
+    res <- GET(asset$url, write_disk(full_path, overwrite = TRUE), progress())
+    stop_for_status(res)
+}
+
+print("Done downloading assets")
+     
+
+```
+
+
+
+
+```{r}
+
+# look at the metadata and convert to dataframe.
+
+FT_metadata <- FT_data[[]] |> as.data.frame()
+FT_metadata_non_cil <- FT_data_non_cil[[]] |> as.data.frame()
+FT_metadata_cil <- FT_data_cil[[]] |> as.data.frame()
+FT_metadata_stroma <- FT_data_stroma[[]] |> as.data.frame()
+
+```
+
+```{r}
+# fimbria_cells <- filter(FT_metadata_cil, tissue == "fimbria of uterine tube")
+# 
+# 
+# ampulla_cells <- filter(FT_metadata_cil, tissue == "ampulla of uterine tube")
+# 
+# 
+# isthmus_cells <- filter(FT_metadata_cil, tissue == "isthmus of fallopian tube")
+
+
+all_segments_cil <- filter(FT_metadata_cil, tissue %in% c("fimbria of uterine tube", "ampulla of uterine tube", "isthmus of fallopian tube"))
+
+all_segments_non_cil <- filter(FT_metadata_non_cil, tissue %in% c("fimbria of uterine tube", "ampulla of uterine tube", "isthmus of fallopian tube"))
+```
+
+
+```{r}
+
+# 
+# Fim_count <- summarize(fimbria_cells, Fimbria_count = n(), .by = c(donor_id, author_cell_type))
+# Amp_count <- summarize(ampulla_cells, Ampulla_count = n(), .by = c(donor_id, author_cell_type))
+# Isth_count <- summarize(isthmus_cells, Isthmus_count = n(), .by = c(donor_id, author_cell_type))
+# 
+# cell_count_cil <- summarize(all_segments_cil, cell_count = n(), .by = c(donor_id, author_cell_type, tissue)) 
+# 
+# cell_count_cil$tissue <- cell_count_cil$tissue |> factor(c("fimbria of uterine tube", "ampulla of uterine tube", "isthmus of fallopian tube"), labels = c("Fim", "Amp", "Isth"))
+# 
+# 
+# cell_count_non_cil <- summarize(all_segments_non_cil, cell_count = n(), .by = c(donor_id, author_cell_type, tissue)) 
+# 
+# 
+# cell_count_non_cil$tissue <- cell_count_non_cil$tissue |> factor(c("fimbria of uterine tube", "ampulla of uterine tube", "isthmus of fallopian tube"), labels = c("Fim", "Amp", "Isth"))
+```
+
+
+
+```{r}
+# 
+# 
+# A <- ggplot(cell_count_cil, aes(fill = author_cell_type, x = tissue, y = cell_count))+
+#   geom_bar(position = 'stack', stat = 'identity')+
+#   labs(title = "Ciliated Cell Type Count")+
+#   facet_wrap(~donor_id)+
+#   theme_bw(base_size = 15)
+# 
+# B <- ggplot(cell_count_cil, aes(fill = author_cell_type, x = tissue, y = cell_count))+
+#   geom_bar(position = 'fill', stat = 'identity')+
+#   labs(title = "Ciliated Cell Type Percentage")+
+#   facet_wrap(~donor_id)+
+#   theme_bw(base_size = 15)
+# 
+# 
+# C <- ggplot(cell_count_cil, aes(fill = author_cell_type, x = tissue, y = cell_count))+
+#   geom_bar(position = 'fill', stat = 'identity')+
+#   theme_bw(base_size = 15)
+
+
+```
+
+
+```{r}
+# D <- ggplot(cell_count_non_cil, aes(fill = author_cell_type, x = tissue, y = cell_count))+
+#   geom_bar(position = 'stack', stat = 'identity')+
+#   facet_wrap(~donor_id)+
+#   labs(title = "Secretory Cell Type Count")+
+#   theme_bw(base_size = 15)
+# 
+# 
+# E <- ggplot(cell_count_non_cil, aes(fill = author_cell_type, x = tissue, y = cell_count))+
+#   geom_bar(position = 'fill', stat = 'identity')+
+#   facet_wrap(~donor_id)+
+#   labs(title = "Secretory Cell Type Percentage")+
+#   theme_bw(base_size = 15)
+# 
+# 
+# F <- ggplot(cell_count_non_cil, aes(fill = author_cell_type, x = tissue, y = cell_count))+
+#   geom_bar(position = 'fill', stat = 'identity')+
+#   theme_bw(base_size = 15)
+
+```
+
+
+```{r fig.height=10, fig.width=18}
+
+# A + B + C + D + E + F+
+#   plot_layout(guides = 'collect', widths = c(3, 3, 1))+
+#   plot_annotation(tag_levels = "A")
+
+
+```
+
+
+
+```{r}
+
+# transcripts are stored using the Ensembl gene format. 
+
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+BiocManager::install("biomaRt")
+
+# Load biomaRt
+library(biomaRt)
+
+```
+
+
+
+
+```{r}
+
+# Use the Ensembl database
+ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")  # Use "hsapiens_gene_ensembl" for human
+```
+
+
+
+```{r}
+
+
+# Define the gene symbol
+gene_symbol <- c("OVGP1", "HLA-DRA")
+
+# Perform the conversion
+gene_info <- getBM(
+  filters = "hgnc_symbol",
+  attributes = c("hgnc_symbol", "ensembl_gene_id"),
+  values = gene_symbol,
+  mart = ensembl
+)
+
+# Display the result
+print(gene_info)
+```
+
+
+
+```{r}
+
+
+gene_data <- FetchData(FT_data_non_cil , vars = gene_info$ensembl_gene_id)
+
+# Calculate the correlation between the two genes
+
+correlation <- cor(gene_data$ENSG00000204287 , gene_data$ENSG00000085465, method = "pearson")  # or "spearman" if you prefer
+# 
+# # Display the result
+print(paste("Correlation between GeneA and GeneB:", correlation))
+# 
+
+```
+
+
+
+```{r}
+
+# Load ggplot2 for visualization
+library(ggplot2)
+library(ggpubr)
+
+
+
+
+
+# Remove any rows with 0 values in the columns
+gene_data_clean <- gene_data %>%
+  dplyr::filter(ENSG00000204287 > 0 & ENSG00000085465 > 0)
+
+# Create a scatter plot to visualize the correlation
+ggplot(gene_data_clean, aes(x = ENSG00000204287, y = ENSG00000085465)) +
+  geom_point() +
+  geom_density_2d_filled() +  # Add density contours
+  coord_cartesian(ylim = c(0, NA))+
+  geom_smooth(method = "lm", color = "red", se = TRUE) +  # Add linear regression line
+  stat_cor(method = "pearson", label.x = 3, label.y = 5) +  # Adjust label.x and label.y to place the correlation label
+  labs(title = paste("Correlation between HLA-DRA and OVGP1:", round(correlation, 2)),
+       x = "HLA-DRA Expression",
+       y = "OVGP1 Expression") +
+  theme_bw()
+
+
+ggplot(gene_data_clean, aes(x = ENSG00000204287, y = ENSG00000085465)) +
+  geom_point() +
+  geom_density_2d_filled(alpha = 0.4) +
+  geom_density_2d(colour = "black")+
+  theme_bw()+
+  labs(title = paste("Correlation between HLA-DRA and OVGP1:", round(correlation, 2)),
+       x = "HLA-DRA Expression",
+       y = "OVGP1 Expression") 
+
+```
+
+
+```{r}
+
+
+
+create_OVGP1_correlations <- function(gene = "HLA-DRA"){
+  
+  gene_symbol <- gene
+  
+  # Perform the conversion
+  gene_info <- getBM(
+    filters = "hgnc_symbol",
+    attributes = c("hgnc_symbol", "ensembl_gene_id"),
+    values = gene_symbol,
+    mart = ensembl
+  )
+
+  # fetch the data for the gene to be tested
+  
+  gene_data <- FetchData(FT_data_non_cil , vars = gene_info$ensembl_gene_id)
+  
+  # rename column
+  
+  names(gene_data) <- "test_gene"
+  
+  # add OVGP1 data
+  
+  gene_data[, "OVGP1"] <- FetchData(FT_data_non_cil , vars = "ENSG00000085465")[, "ENSG00000085465"]
+    
+  
+  # Remove any rows with 0 values in the columns
+  gene_data_clean <- gene_data %>%
+    dplyr::filter(test_gene > 0 & OVGP1 > 0)
+  
+  # calculate correlation
+  
+  correlation <- cor(gene_data_clean$OVGP1 , gene_data_clean$test_gene, method = "pearson")
+  
+  # Create a scatter plot to visualize the correlation
+
+  
+  plot <- ggplot(gene_data_clean, aes(x = OVGP1, y = test_gene)) +
+    geom_point() +
+    geom_density_2d_filled(alpha = 0.4) +
+    geom_density_2d(colour = "black")+
+    theme_bw()+
+    labs(title = paste("Corr", gene, "v OVGP1:", round(correlation, 2)),
+         x = paste0(gene, " Expression"),
+         y = "OVGP1 Expression") +
+    geom_smooth(method = "lm", color = "red", se = TRUE) +  # Add linear regression line
+    stat_cor(method = "pearson", label.y.npc = 0.9, label.x.npc = 0.5)  # Adjust label.x and label.y to place the correlation label
+    
+    
+  return(plot) 
+}
+
+
+
+```
+
+
+# Figure S 8D
+
+```{r fig.height=10, fig.width=15}
+library(patchwork)
+
+gene_list <- c("HLA-DRA", "HLA-DRB1", "HLA-DMA", "HLA-DPA1", "HLA-DMB", "HLA-DQA1", "HLA-DQB1") #"HLA-DRB", "HLA-DRB2", "HLA-DRB3", "HLA-DRB4", "HLA-DMA", "HLA-DMB", "HLA-DQA1", "HLA-DQB1", "HLA-DPA1", "HLA-DOA", "CD74")
+
+HLA_DRA <- create_OVGP1_correlations("HLA-DRA")
+
+HLA_DRB1 <- create_OVGP1_correlations("HLA-DRB1")
+
+HLA_DPA1 <- create_OVGP1_correlations("HLA-DPA1")
+
+HLA_DPB1 <- create_OVGP1_correlations("HLA-DPB1")
+
+HLA_DQA1 <- create_OVGP1_correlations("HLA-DQA1")
+
+HLA_DQA2 <- create_OVGP1_correlations("HLA-DQA2")
+
+HLA_DQB1 <- create_OVGP1_correlations("HLA-DQB1")
+
+HLA_DMA <- create_OVGP1_correlations("HLA-DMA")
+
+
+
+CFB <- create_OVGP1_correlations("CFB")
+
+CD74 <- create_OVGP1_correlations("CD74")
+
+
+HLA_DRA + HLA_DRB1 + HLA_DPA1 + HLA_DPB1 + HLA_DQA1 + HLA_DQA2 + HLA_DQB1 + HLA_DMA + CD74
+
+
+```
+
+
+# Session Info
+
+```{r}
+
+sessionInfo()
+
+```

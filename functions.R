@@ -217,98 +217,6 @@ get_legend <- function(plot, legend = NULL) {
 
 
 
-### Functions for creating volcano plots Fig 3
-
-
-
-#### FUNCT: volcano_plot
-
-# This function takes a data frame containing log_fold, p_value, and minuslog10_Pvalue columns and plots a volcano plot.
-# 
-# Optionally, you can label selected genes in purple by providing the plot with a list of genes names in `highlight_genes`.
-# 
-# Change `flip_log_fold` to `TRUE` to flip which side of the volcano plot is upregulated. 
-# 
-# To label genes, use the function add_labels below. 
-
-
-volcano_plot <- function(
-    df = NULL,
-    highlight_genes = c(), #empty list
-    title_name = NULL,
-    title_size = 8,
-    upreg = NULL,
-    downreg = NULL,
-    xmin = -4,
-    xmax = 4,
-    lab_size = 3,
-    FC_cutoff = 0.5,
-    flip_log_fold = F
-){
-  if(is.null(upreg) & is.null(downreg)){
-    FC_name = TeX("$log_2(FC)$")
-  }
-  else{
-    FC_name = TeX(paste0("$log_2(\\frac{\\mu_{", upreg, "}}{\\mu_{", downreg, "}})$"))
-  }
-  if(is.null(title_name)){
-    title_name = deparse(substitute(df))
-  }
-  if(flip_log_fold){
-    df$log_fold <- -df$log_fold
-  }
-  df$color <- "NS or FC < 0.5"
-  
-  df$color[df$log_fold > FC_cutoff & df$p_value < 0.05] <- "Upregulated"
-  df$color[df$log_fold < -FC_cutoff & df$p_value < 0.05] <- "Downregulated"
-  df$color[df$Marker.name %in% highlight_genes] <- "Markers of Mature Ciliated Cells"
-  df$color <- factor(df$color,
-                     levels = c("NS or FC < 0.5", "Upregulated", "Downregulated", "Markers of Mature Ciliated Cells"))
-  
-  genes_to_label <- filter(df, df$color != "NS or FC < 0.5")
-  
-  
-  ggplot(df, aes(x = log_fold, y = minuslog10_Pvalue))+
-    geom_point(aes(color = color)) +
-    labs(title = title_name, x = FC_name, y = TeX("$-log_{10}(p_{value})$"))+
-    xlim(xmin, xmax)+
-    
-    # coord_cartesian(ylim= c(0, 10))+
-    
-    scale_color_manual(values = c(`Downregulated` = "blue",
-                                  `Upregulated` = "red",
-                                  `NS or FC < 0.5` = "gray",
-                                  `Markers of Mature Ciliated Cells` = "forestgreen"),
-                       guide = guide_legend(override.aes = list(size = 6)))+
-    
-    geom_vline(xintercept = 0.5, linetype = "dashed", color = "blue")+
-    geom_vline(xintercept = -0.5, linetype = "dashed", color = "blue")+
-    
-    # add lines at p-value cut-offs
-    geom_hline(yintercept = 1.3, linetype = "dashed", color = "red")+
-    
-    
-    
-    # highlight desired genes
-    # must be called after the original geom_point to ensure highlighted genes are visible
-    geom_point(data = df[df$Marker.name %in% highlight_genes, ],
-               aes(x = log_fold, y = minuslog10_Pvalue),
-               color = "forestgreen"
-    )+
-    
-    
-    theme_light(base_size = 24, base_family = "sans")+
-    
-    # remove dumb grid-lines
-    theme(panel.grid.major = element_blank(),
-          panel.grid.minor = element_blank())+
-    labs(color = "Color")+
-    
-    theme(plot.title = element_text(size = title_size))
-}
-
-
-
 
 #### FUNCT: add_labels
 
@@ -521,6 +429,92 @@ volcano_plot <- function(
           panel.grid.minor = element_blank())+
     labs(color = "Color")+
       
+    theme(plot.title = element_text(size = title_size))
+}
+
+
+
+
+
+#### FUNCT: volcano_plot_S6
+
+# This volcano plot has been modified slightly for use in S6
+
+
+volcano_plot_S6 <- function(
+    df = NULL,
+    highlight_genes = c(), #empty list
+    title_name = NULL,
+    title_size = 8,
+    upreg = NULL,
+    downreg = NULL,
+    xmin = -2,
+    xmax = 2,
+    lab_size = 4,
+    FC_cutoff = 0.5,
+    flip_log_fold = FALSE,
+    point_size = 6
+){
+  if(is.null(upreg) & is.null(downreg)){
+    FC_name = TeX("$log_2(FC)$")
+  }
+  else{
+    FC_name = TeX(paste0("$log_2(\\frac{\\mu_{", upreg, "}}{\\mu_{", downreg, "}})$"))
+  }
+  if(is.null(title_name)){
+    title_name = deparse(substitute(df))
+  }
+  if(flip_log_fold){
+    df$log_fold <- -df$log_fold
+  }
+  df$color <- "NS or FC < 0.5"
+  
+  df$color[df$log_fold > FC_cutoff & df$p_value < 0.05] <- "Upregulated"
+  df$color[df$log_fold < -FC_cutoff & df$p_value < 0.05] <- "Downregulated"
+  df$color[df$Marker.name %in% highlight_genes] <- "Markers of Mature Ciliated Cells"
+  df$color <- factor(df$color,
+                     levels = c("NS or FC < 0.5", "Upregulated", "Downregulated", "Markers of Mature Ciliated Cells"))
+  
+  genes_to_label <- filter(df, df$color != "NS or FC < 0.5")
+  
+  
+  ggplot(df, aes(x = log_fold, y = minuslog10_Pvalue))+
+    geom_point(aes(color = color), size = point_size) +
+    labs(title = title_name, x = FC_name, y = TeX("$-log_{10}(p_{value})$"))+
+    xlim(xmin, xmax)+
+    
+    # coord_cartesian(ylim= c(0, 10))+
+    
+    scale_color_manual(values = c(`Downregulated` = "blue",
+                                  `Upregulated` = "red",
+                                  `NS or FC < 0.5` = "black",
+                                  `Markers of Mature Ciliated Cells` = "limegreen"),
+                       guide = guide_legend(override.aes = list(size = 6)))+
+    
+    geom_vline(xintercept = 0.5, linetype = "dashed", color = "blue")+
+    geom_vline(xintercept = -0.5, linetype = "dashed", color = "blue")+
+    
+    # add lines at p-value cut-offs
+    geom_hline(yintercept = 1.3, linetype = "dashed", color = "red")+
+    
+    
+    
+    # highlight desired genes
+    # must be called after the original geom_point to ensure highlighted genes are visible
+    geom_point(data = df[df$Marker.name %in% highlight_genes, ],
+               aes(x = log_fold, y = minuslog10_Pvalue),
+               color = "limegreen",
+               size = point_size
+    )+
+    
+    
+    theme_light(base_size = 24, base_family = "sans")+
+    
+    # remove dumb grid-lines
+    theme(panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank())+
+    labs(color = "Color")+
+    
     theme(plot.title = element_text(size = title_size))
 }
 

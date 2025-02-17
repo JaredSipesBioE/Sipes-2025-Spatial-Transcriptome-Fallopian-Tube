@@ -116,6 +116,7 @@ library(readr) # needed for read_csv()
 
 library(stringr)
 
+library(tidyverse)
 
 ```
 
@@ -573,7 +574,7 @@ e <- volcano_plot(df = df1$inf_v_isth,
                  # highlight_genes = cil_inf_v_isth
                  ) |> add_labels(df = df1$inf_v_isth, n_genes = n_genes, lab_size = lab_size)
 
-f <- volcano_plot(df = df1$amp_v_isth, 
+f_plot <- volcano_plot(df = df1$amp_v_isth, 
                  title_name = "Amp v Isth, Secretory, Discovery", 
                  title_size = title, upreg = "Ampulla", downreg = "Isthmus"
                  # highlight_genes = cil_amp_v_isth
@@ -625,7 +626,7 @@ top <-   grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Disc
 
 bottom <- grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Discovery Dataset, Ciliated Cells', gp=gpar(fontsize=25)))
 
-wrap_elements(top) / ((a | b | c ) / (d | e | f)) / wrap_elements(bottom) / ((g | h | i ) / (j | k | l)) + plot_layout(heights = c(1,15,1,15), guides = "collect") + plot_annotation(tag_levels = list(c("", "a", "b", "c", "d", "e", "f", "", "g", "h", "i", "j", "k", "l"))) & 
+wrap_elements(top) / ((a | b | c ) / (d | e | f_plot)) / wrap_elements(bottom) / ((g | h | i ) / (j | k | l)) + plot_layout(heights = c(1,15,1,15), guides = "collect") + plot_annotation(tag_levels = list(c("", "a", "b", "c", "d", "e", "f", "", "g", "h", "i", "j", "k", "l"))) & 
   theme(plot.tag = element_text(size = 26))
 
 
@@ -808,6 +809,128 @@ volcano_plot(df = valid_cil$isth_v_other,
 Supplemental Figure 6 – Markers of Mature Ciliated Cells are upregulated in the distal fallopian tube
 
 
+## Markers of Mature Ciliated Cells 
+
+
+The following markers of mature ciliated cells are identified using single cell sequencing by Ulrich et al. 
+'
+Cellular heterogeneity of human fallopian tubes in normal and hydrosalpinx disease states identified using scRNA-seq
+
+DOI: 10.1016/j.devcel.2022.02.017
+
+
+```{r}
+
+mature_cil <- c(
+  "CAPS", "CETN2", "PIFO", "C1orf194", "C9orf24", "SNTN", "AGR3", "C20orf85", "MORN2", "PERP", "HMGN3", "TMEM59", "RSPH1",
+  "CALM1", "AGR2", "METRN", "DYNLL1", "CD24", "TXN", "PRDX5", "C9orf116", "IK", "MORN5", "FAM183A", "CFAP126", "CAPSL",
+  "IGFBP7", "C11orf88", "SPA17", "ODF3B", "CCDC146", "DYNLRB2", "FAM92B", "C9orf135", "PSENEN", "C5orf49", "FAM81B", "ARHGAP18", "PPIL6",
+  "SLC44A4", "RBP1", "ANKRD66", "CYSTM1", "MLF1", "CFAP52", "WDR54", "LRRC23", "CTSS", "TAX1BP1", "TPPP3", "GON7", "FAM174A",
+  "C6", "TSPAN3", "CIB1", "EFCAB1", "IFT57", "CCDC170", "DYDC2", "ARMC3", "NME5", "ENKUR", "MNS1", "TCTN1", "SMIM22",
+  "C11orf97", "WDR78", "MS4A8", "TSPAN6", "FAM216B", "RIIAD1", "FOXJ1", "ARL3", "DRC1", "CTXN1", "ROPN1L", "NUCB2", "EZR",
+  "GSTA3", "C4orf48", "MT-ND3", "NELL2", "CCDC113", "SPAG6", "AC013264.1", "GET1", "FXYD3", "TFF3", "EFCAB10", "STK33", "SPATA17",
+  "FAIM", "CABCOCO1", "CKB", "TTC29", "KIF21A", "SCGB2A1", "AL357093.2", "STOML3", "CFAP53", "WDR86-AS1", "DNAH9", "C20orf96", "TUBA1A",
+  "LDLRAD1", "SAMHD1", "SOD3", "DNAH5", "CCDC173", "ERICH3", "CTSD", "MT-ND5", "TSPAN1", "PLTP", "AK1", "FOLR1", "RHOB",
+  "FABP6", "CST6", "PDK4", "ANXA13", "RHOU", "IRX3", "C12orf75", "NEDD9", "MOSPD1", "TMEM190", "CRIP1", "MT-ND4L", "GOLM1",
+  "ASRGL1", "SCGB1D4", "GSTA1", "PGR", "G0S2", "FGA", "RRAD"
+)
+
+```
+
+
+## Volcano plots
+
+
+```{r fig.width=20, fig.height= 6}
+
+title = 20
+
+df1 <- pairwise_comparisons$disc$cil
+
+# df2 <- pairwise_comparisons$valid$cil
+
+fim_v_inf_disc <- volcano_plot_S6(df = df1$fim_v_inf, 
+                 title_name = "Fimbria v Infundibulum, Ciliated Cells, Discovery", title_size = title, 
+                 upreg = "Fimbria", downreg = "Infundibulum",
+                 highlight_genes = mature_cil, flip_log_fold = TRUE, point_size = 3
+                 ) |> add_labels(df = df1$fim_v_inf, lab_size = 5, 
+                                 highlight_genes = mature_cil, n_genes =0, flip_log_fold = T) |> remove_legend()
+
+inf_v_amp_disc <- volcano_plot_S6(df = df1$inf_v_amp, 
+                 title_name = "Infundibulum v Ampulla, Ciliated Cells, Discovery", title_size = title, 
+                 upreg = "Infundibulum", downreg = "Ampulla",
+                 highlight_genes = mature_cil, flip_log_fold = TRUE, point_size = 3
+                 ) |> add_labels(df = df1$inf_v_amp, lab_size = 5, 
+                                 highlight_genes = mature_cil, n_genes =0, flip_log_fold = TRUE) |> remove_legend()
+
+amp_v_isth_valid <- volcano_plot_S6(df = df1$amp_v_isth, 
+                 title_name = "Ampulla v Isthmus, Ciliated Cells, Discovery", title_size = title, 
+                 upreg = "Ampulla", downreg = "Isthmus",
+                 highlight_genes = mature_cil, flip_log_fold = TRUE, point_size = 3
+                 ) |> add_labels(df = df1$amp_v_isth, lab_size = 5, highlight_genes = mature_cil, n_genes =0, flip_log_fold = T) |> remove_legend()
+
+
+
+
+fim_v_inf_disc + inf_v_amp_disc + amp_v_isth_valid
+
+# volcano_plot(df = df2$fim_v_isth, 
+#                  title_name = "Fimbria v Isthmus, Ciliated Cells, Validation", 
+#                  title_size = title, upreg = "Fimbria", downreg = "Isthmus",
+#                  highlight_genes = mature_cil
+#                  )
+
+
+```
+
+## S6 Boxplots
+
+```{r fig.height=5, fig.width=10}
+
+library(patchwork)
+
+# Ascending Secretory approaching Isthmus
+
+Fig3 <- c("FOXJ1", "PAX8")
+
+make_fig3 <- function(genes = Fig3, dataset = all_q_norm, title = "All"){
+
+  graphs_up_Fig3 <- lapply(X = genes, FUN = Cil_v_Sec_Anat_Boxplot_Points, dataset = dataset)
+  
+  legend <- make_boxplot_legend(dataset = dataset)
+  
+  Fig3_resize <- lapply(graphs_up_Fig3, adj_text_size, pnt = 17)
+  Fig3_remove_legend <- lapply(Fig3_resize, remove_legend)
+  Fig3_sig <- lapply(Fig3_remove_legend, add_sig, pnt = 4)
+
+
+  plot <- (Fig3_sig[[1]] + Fig3_sig[[2]]) / legend + 
+    plot_layout(heights = c(3, 1)) + 
+    plot_annotation(title = title, theme = theme(text=element_text(size=30)))
+  
+  return(plot)
+  
+  }
+
+
+F3_all <- make_fig3(genes = Fig3, dataset = all_q_norm, title = "All")
+
+
+F3_disc <- make_fig3(genes = Fig3, dataset = disc_q_norm, title = "Discovery")
+
+
+F3_valid <- make_fig3(genes = Fig3, dataset = valid_q_norm, title = "Validation")
+
+
+F3_all
+
+F3_disc
+F3_valid
+
+```
+
+
+
 
 
 
@@ -815,6 +938,109 @@ Supplemental Figure 6 – Markers of Mature Ciliated Cells are upregulated in th
 
 Supplementary Figure 7. Other MHC-II Transcripts in the FT epithelium.
 
+
+```{r}
+
+figS7_genes <- c("HLA-DPA1", "HLA-DPB1", "HLA-DRA", "HLA-DRB", "HLA-DRB3", "HLA-DRB4", "HLA-DQA1", "HLA-DQB1", "HLA-DMA", "HLA-DMB", "HLA-DOA", "CD74", "C2", "C4B", "CFB")
+
+
+make_figS7_boxplots <- function(genes = FigS7_genes, dataset = all_q_norm, title = "All"){
+
+  graphs <- lapply(X = genes, FUN = Cil_v_Sec_Anat_Boxplot_Points, dataset = dataset)
+  
+  # resize
+  graph_resize <- lapply(graphs, adj_text_size, pnt = 17)
+  graph_remove_legend <- lapply(graph_resize, remove_legend)
+  graph_sig <- lapply(graph_remove_legend, add_sig, pnt = 4)
+
+  return(graph_sig)
+  
+  }
+
+# Create all of the Boxplots for the Discovery Dataset
+
+fS7_disc <- make_figS7_boxplots(genes = figS7_genes , dataset = disc_q_norm)
+names(fS7_disc) <- figS7_genes
+
+# Create all of the Boxplots for the Validation Dataset
+
+fS7_valid <- make_figS7_boxplots(genes = figS7_genes , dataset = valid_q_norm)
+names(fS7_valid) <- figS7_genes
+
+```
+
+
+
+```{r fig.height=40, fig.width=20}
+
+
+# Create Grobs for use as labels
+
+top <- grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Discovery Dataset: MHC-II transcripts', gp=gpar(fontsize=25)))
+
+middle <- grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Discovery Dataset: MHC-II Helper transcripts', gp=gpar(fontsize=25)))
+
+bottom <- grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Discovery Dataset: Cytokines in HLA locus', gp=gpar(fontsize=25)))
+
+
+top_2 <- grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Validation Dataset: MHC-II transcripts', gp=gpar(fontsize=25)))
+
+middle_2 <- grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Validation Dataset: MHC-II Helper transcripts', gp=gpar(fontsize=25)))
+
+bottom_2 <- grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Validation Dataset: Cytokines in HLA locus', gp=gpar(fontsize=25)))
+
+# create legends
+
+legend_disc <- make_boxplot_legend(dataset = disc_q_norm)
+
+legend_valid <- make_boxplot_legend(dataset = valid_q_norm)
+
+
+  # Part 1 - disc MHCII Transcripts
+  wrap_elements(top) / 
+  (fS7_disc$`HLA-DRB3` | fS7_disc$`HLA-DRB4` |  fS7_disc$`HLA-DPB1` | fS7_disc$`HLA-DQB1`) /
+  legend_disc /
+  # Part 2 - helper MHCII Transcripts  
+  wrap_elements(middle) / 
+  (fS7_disc$`HLA-DMA` | fS7_disc$`HLA-DOA` |  fS7_disc$`HLA-DMB` | fS7_disc$`CD74`) /
+  legend_disc /
+  # Part 3 - Cytokines in HLA Locus 
+  wrap_elements(bottom) /
+  (fS7_disc$`C2` | fS7_disc$`C4B` |  fS7_disc$`CFB`) /
+  legend_disc /
+    
+  # Part 4 - disc MHCII Transcripts
+  wrap_elements(top_2) / 
+  (fS7_valid$`HLA-DRB3` | fS7_valid$`HLA-DRB4` |  fS7_valid$`HLA-DPB1` | fS7_valid$`HLA-DQB1`) /
+  legend_disc /
+  # Part 5 - helper MHCII Transcripts  
+  wrap_elements(middle_2) / 
+  (fS7_valid$`HLA-DMA` | fS7_valid$`HLA-DOA` |  fS7_valid$`HLA-DMB` | fS7_valid$`CD74`) /
+  legend_disc /
+  # Part 3 - Cytokines in HLA Locus 
+  wrap_elements(bottom_2) /
+  (fS7_valid$`C2` | fS7_valid$`C4B` |  fS7_valid$`CFB`) /
+  legend_disc /
+
+    
+    
+    plot_layout(heights = c(0.5, 4, 0.5, # Part 1
+                            0.5, 4, 0.5, # Part 2
+                            0.5, 4, 0.5, # Part 3
+                            0.5, 4, 0.5, # Part 4
+                            0.5, 4, 0.5, # Part 5
+                            0.5, 4, 0.5  # Part 6
+                            ))          
+    
+    # plot_annotation(tag_levels = list(c("", "a", "b", "c", "d", 
+    #                                     "", "", "e", "f", "g", "h", 
+    #                                     "", "","i", "j", "k", "l", 
+    #                                     "", "", "m", "n", "o", "p", "")), 
+    #                                theme = theme(plot.tag = element_text(size = 30, face = "bold")))
+
+
+
+```
 
 
 
@@ -825,7 +1051,9 @@ Supplementary Figure 8. Multiple datasets show MHC-II transcript expression vari
 
 Analysis of publicly available FT transcriptome datasets.
 
-analysis performed separately. See Sowamber analysis and Ulrich analysis notebooks for details. 
+This analysis is too long to fit neatly here, so I have separated it into two files. 
+
+For the Sowamber paper (figure S8A and S8B) see Sowamber Paper Analysis.Rmd.
 
 
 
@@ -855,7 +1083,7 @@ pull_gene <- function(df = NULL, cluster_name = NULL){
 
 # Retrieve PEG cell markers identified in this excel document
 
-source_file_NCE <- paste0(getwd(), "/cell_markers/Ulrich_NCE_Markers.xlsx")
+source_file_NCE <- paste0(getwd(), "/ulrich_files/Ulrich_NCE_Markers.xlsx")
 
 
 # read in excel document
@@ -1132,9 +1360,64 @@ names(FS10_valid) <- FigS10_gene_list
 
 ```
 
+## Load OVGP1 Data
+
+```{r}
+
+#read in from excel
+OVGP1_percent <- read_xlsx(path = paste0(getwd(), "/IHC_analysis/OVGP1 Percentages.xlsx"))
+
+# adjust to tidy data format
+OVGP1 <- OVGP1_percent |> pivot_longer(cols = c("Fim", "Inf", "Amp", "Isth"), names_to = "region", values_to = "percent") |> mutate(percent = as.numeric(percent))
+
+# factor region 
+OVGP1$region <- OVGP1$region |> factor(levels = c("Fim", "Inf", "Amp", "Isth"))
+
+# remove slides not in GeoMx dataset 
+OVGP1_subset <- OVGP1[OVGP1$patient_ID %in% unique(pData(all_q_norm)$patient_ID),]
 
 
-```{r fig.height=12, fig.width=24}
+# this is necessary to merge with the GeoMx Object. 
+OVGP1_subset <- transform(OVGP1_subset, patient_ID = as.double(patient_ID))
+
+
+# merge OVGP1 data
+pData(all_q_norm) <- pData(all_q_norm) |> left_join(OVGP1_subset |> dplyr::select(region, patient_ID, percent), by = c("region", "patient_ID"))
+
+```
+
+### FUNCT: compare_OVGP1()
+
+```{r}
+
+compare_OVGP1 <- function(dataset = all_q_norm, gene = "HLA-DRA", title_append = "Expression v % OVGP1+ Cells"){
+  # get expression of selected gene 
+  
+  gene_vector <- as.vector(assayDataElement(dataset, elt = "q_norm")[gene, ])
+
+  plot <- ggplot(data = pData(dataset), aes(x = percent, y = gene_vector))+
+    geom_point(aes(color = Patient))+
+    labs(title = TeX(paste0("\\textit{", gene, "} ", title_append)), 
+         y = TeX(paste0("\\textit{", gene, "} ", "Expression (GeoMx)")),
+         x = "Percent OVGP1+ Cells in Region (IHC staining)")+
+    geom_smooth(formula = y ~ x, method = "lm")+ 
+    stat_cor(method="pearson", size = 5)+
+    theme_classic()
+
+  return(plot)
+}
+
+```
+
+
+
+```{r}
+PGR <- compare_OVGP1(gene = "PGR")
+ESR1 <- compare_OVGP1(gene = "ESR1")
+```
+
+
+```{r fig.height=16, fig.width=24}
 
 # create grobs
 top <-   grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Discovery Dataset: Hormone Receptors and Associated Pioneer Transcription Factors', gp=gpar(fontsize=25)))
@@ -1148,16 +1431,14 @@ bottom <- grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Val
   legend_disc /
   wrap_elements(bottom) / 
   (FS10_valid$ESR1 | FS10_valid$PGR |  FS10_valid$AR | FS10_valid$FOXA2 | FS10_valid$PBX1) /
-  legend_valid +
-  plot_layout(heights = c(0.5, 4, 0.5, 0.5, 4, 0.5)) 
+  legend_valid /
+    (PGR | ESR1)    +
+  plot_layout(heights = c(0.5, 4, 0.5, 0.5, 4, 0.5, 4)) 
 
 
 
 
 ```
-
-
-
 
 
 
