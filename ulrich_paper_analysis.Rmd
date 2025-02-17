@@ -48,15 +48,7 @@ library(tidyverse)
 getwd()
 ```
 
-```{r}
 
-# FT_data <- readRDS(paste0(getwd(), "/ulrich_files", "/Ulrich 4 healthy FT.RDS"))
-# FT_data_non_cil <- readRDS(paste0(getwd(),"/ulrich_files",  "/Ulrich Epithelial NonCiliated.RDS"))
-# FT_data_cil <- readRDS(paste0(getwd(), "/ulrich_files", "/Ulrich Epithelial Ciliated.RDS"))
-# FT_data_stroma <- readRDS(paste0(getwd(), "/ulrich_files", "/Ulrich Stromal.RDS"))
-
-
-```
 
 
 
@@ -82,49 +74,67 @@ api_url_base <- str_interp("https://api.${domain_name}")
 
 
 
-# Formulate request and fetch a Datasets metadata
-
-dataset_path_non_cil <- str_interp("/curation/v1/collections/${collection_id}/datasets/${dataset_id_non_cil}") 
-url <- str_interp("${api_url_base}${dataset_path_non_cil}")
-
-res <- GET(url=url, add_headers(`Content-Type`="application/json"))
-stop_for_status(res)
-res_content <- content(res)
-print(res_content)
-
-
-# Download Dataset Assets
-
-assets <- content(res)$assets
-dataset_id <- content(res)$dataset_id
-dataset_name <- "ulrich_epithelial_non_cil"
-save_folder <- paste0(getwd(), "/ulrich_files")
-for (asset in assets) {
-    download_filename <- str_interp("${dataset_name}.${asset$filetype}")
-    full_path <- file.path(save_folder, download_filename) #construct full path
-    
-    
-    print(str_interp("Downloading ${download_filename}... "))
-    res <- GET(asset$url, write_disk(full_path, overwrite = TRUE), progress())
-    stop_for_status(res)
+fetch_dataset <- function(collection_id, dataset_id, name){
+  
+  # Formulate request and fetch dataset metadata
+  
+  dataset_path_non_cil <- str_interp("/curation/v1/collections/${collection_id}/datasets/${dataset_id}") 
+  url <- str_interp("${api_url_base}${dataset_path_non_cil}")
+  
+  res <- GET(url=url, add_headers(`Content-Type`="application/json"))
+  stop_for_status(res)
+  res_content <- content(res)
+  #print(res_content)
+  
+  
+  # Download Dataset Assets
+  
+  assets <- content(res)$assets
+  dataset_id <- content(res)$dataset_id
+  dataset_name <- name
+  save_folder <- paste0(getwd(), "/ulrich_files")
+  
+  
+  
+  for (asset in assets) {
+      download_filename <- str_interp("${dataset_name}.${asset$filetype}")
+      full_path <- file.path(save_folder, download_filename) #construct full path
+      
+      print(str_interp("Downloading ${download_filename}... "))
+      res <- GET(asset$url, write_disk(full_path, overwrite = TRUE), progress())
+      stop_for_status(res)
+  }
+  
+  print("Done downloading assets")
+  
+  
 }
 
-print("Done downloading assets")
      
 
+fetch_dataset(collection_id, dataset_id = dataset_id_non_cil, name  = "ulrich_epithelial_non_cil")
+fetch_dataset(collection_id, dataset_id = dataset_id_cil, name  = "ulrich_epithelial_cil")
 ```
 
 
+```{r}
 
+# FT_data <- readRDS(paste0(getwd(), "/ulrich_files", "/Ulrich 4 healthy FT.RDS"))
+FT_data_non_cil <- readRDS(paste0(getwd(),"/ulrich_files",  "/ulrich_epithelial_non_cil.RDS"))
+FT_data_cil <- readRDS(paste0(getwd(), "/ulrich_files", "/ulrich_epithelial_cil.RDS"))
+# FT_data_stroma <- readRDS(paste0(getwd(), "/ulrich_files", "/Ulrich Stromal.RDS"))
+
+
+```
 
 ```{r}
 
 # look at the metadata and convert to dataframe.
 
-FT_metadata <- FT_data[[]] |> as.data.frame()
+# FT_metadata <- FT_data[[]] |> as.data.frame()
 FT_metadata_non_cil <- FT_data_non_cil[[]] |> as.data.frame()
 FT_metadata_cil <- FT_data_cil[[]] |> as.data.frame()
-FT_metadata_stroma <- FT_data_stroma[[]] |> as.data.frame()
+# FT_metadata_stroma <- FT_data_stroma[[]] |> as.data.frame()
 
 ```
 
