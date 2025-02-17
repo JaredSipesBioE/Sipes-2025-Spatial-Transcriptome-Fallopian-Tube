@@ -16,8 +16,8 @@ Files:
 * **data_analysis.Rmd** - contains preliminary QC, Filtering, and Normalization of the GeoMx Dataset
 * **main_figures.Rmd** - contains the code used to generate the main figures for this paper
 * **supplementary_figures.Rmd** - contains the code used to generate the supplemental figures for this paper
-* **sowamber_paper_analysis** - analyzes data from the Sowamber paper, used to generate supplementary figures S8A and S8B
-* **ulrich_paper_analysis** - analyzes data from the Ulrich paper, used to generate supplementary figures S8D
+* **sowamber_paper_analysis.Rmd** - analyzes data from the Sowamber paper, used to generate supplementary figures S8A and S8B
+* **ulrich_paper_analysis.Rmd** - analyzes data from the Ulrich paper, used to generate supplementary figures S8D
 * **functions.R** - contains helper functions for generating graphs that were taking up too much space in the main markdown documents. 
 
 
@@ -34,7 +34,7 @@ Folders:
   * /All_GO - contains results of GO analysis when considering all data
   * /Discovery_GO - results of GO analysis using only the discovery cohort
   * /Validation_Go - results of GO analysis using only the validation cohort
-* **ulrich_files** - contains data from the Ulrich 2022 paper used in analysis
+* **ulrich_files** - contains data from the Ulrich 2022 paper used in analysis (files too large for github and must be downloaded, see .rmd)
 
 
 

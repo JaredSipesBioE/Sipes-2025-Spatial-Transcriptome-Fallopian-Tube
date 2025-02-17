@@ -1442,6 +1442,10 @@ bottom <- grobTree(rectGrob(gp=gpar(fill='#F0F0F0',col= 'black')), textGrob('Val
 
 
 
+```{r}
 
+sessionInfo()
+
+```
 
 
